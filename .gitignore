@@ -1,0 +1,4 @@
+.env
+agente_marketing
+*.exe
+*.out

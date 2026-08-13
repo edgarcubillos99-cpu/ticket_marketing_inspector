@@ -41,7 +41,7 @@ func LoadConfig() (*Config, error) {
 		UbersmithToken:   strings.TrimSpace(os.Getenv("UBERSMITH_TOKEN")),
 		UbersmithLimit:   envInt("UBERSMITH_LIMIT", 0),
 		OpenAIKey:        strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
-		OpenAIModel:      envOr("OPENAI_MODEL", "gpt-4o"),
+		OpenAIModel:      envOr("OPENAI_MODEL", "gpt-5.6-luna"),
 		MySQLHost:        strings.TrimSpace(os.Getenv("MYSQL_HOST")),
 		MySQLPort:        envOr("MYSQL_PORT", "3306"),
 		MySQLUser:        strings.TrimSpace(os.Getenv("MYSQL_USER")),

@@ -28,8 +28,8 @@ Revisa el valor actual proporcionado. Si el valor es "OTHER" o está vacío, bus
 5. "Fecha y Hora":
 
 6. "Referred by":
-Revisa el valor actual. Si es "Otros", "OTHER" o está vacío, busca en el historial de dónde provino el referido (ej. "Referido: Facebook", "Referido: Internet"). DEBES mapearlo SOLO a una de estas opciones exactas:
-[Social Media, Google / WEB, Otro Cliente, Familiar, Vecino, Flyer, Anuncio TV, Radio, Oficina, Guagua, Otra Compañía, Un amigo]. Si dice "Internet" o "Facebook", mapealo a "Social Media" o "Google / WEB" según el contexto.
+Revisa el valor actual. Si es "Otros", "OTHER" o está vacío, busca en el historial de dónde provino el referido. DEBES mapearlo SOLO a una de estas opciones exactas:
+"Un amigo", "Otra Compañía", "Guagua", "Oficina", "Radio", "Anuncio TV", "Flyer", "Vecino", "Familiar", "Otro Cliente", "Google / WEB", "Social Media", "Es Cliente", "Fué Cliente". según el contexto.
 
 7. "Estatus":
 Lee cuidadosamente todo el historial para determinar el estatus real de la solicitud. SOLO puedes responder con una de estas tres opciones:
@@ -38,10 +38,12 @@ Lee cuidadosamente todo el historial para determinar el estatus real de la solic
 - "En espera": Si la solicitud aún se está trabajando, hay citas pendientes, se dejó mensaje, o está coordinada para una fecha futura.
 
 8. "Motivo (No Instalada)":
-SÓLO llena este campo si el "Estatus" es "No Instalada". Extrae la razón principal y resúmela (Ej. "Cobertura Negativa", "No contestó", "Cliente canceló", "No tiene visibilidad"). Si el estatus es otro, deja este campo vacío ("").
+SÓLO llena este campo si el "Estatus" es "No Instalada". Escribe la razón principal, estos motivos pueden ser estrictamente: "Quiere es fibra óptica", "Quería Internet con TV", "Tiene deuda pendiente", "Tiene contrato con otra compañía", "Se va de viaje", "Se va a mudar", "Se fue con otra compañía", "No tiene el dinero", "No puede instalar antena", "No LOSS (Residencial Público)", "No le da la velocidad que Quiere", "No Interesado", "No envió documentos", "No contesta", "Mucha Espera", "Es Menor de Edad", "Le pareció Caro", "Cobertura Negativa", "Cliente quedó en llamar", "Canceló la visita", "Canceló la Solicitud", "no indica"
+Si el estatus es otro, deja este campo vacío ("").
 
 9. "Plan Instalado":
-SÓLO llena este campo si el "Estatus" es "Instalada". Busca en el historial qué plan de velocidad se contrató finalmente (Ej. "25Mbps/5mbps", "50 Mb"). Si el estatus es otro, deja este campo vacío ("").
+SÓLO llena este campo si el "Estatus" es "Instalada". Busca en el historial qué plan de velocidad se contrató finalmente, anotando solo la velocidad de subida, estos planes pueden ser estrictamente: "25mb", "50Mb", "100Mb", "200Mb".
+Si el estatus es otro, deja este campo vacío ("").
 
 10. "Agente":
 Identifica a la primera persona que escribió en el historial (el autor del mensaje más antiguo, es decir, el primer objeto en la lista del historial). Extrae solo el nombre, ignorando el correo (Ej. de "Milagros Rodriguez <mrodriguez...>" extrae "Milagros Rodriguez").

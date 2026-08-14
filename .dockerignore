@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+!.env.example
+agente_marketing
+*.exe
+*.out
+*.test
+Dockerfile
+docker-compose*.yml
+README*
+**/*_test.go

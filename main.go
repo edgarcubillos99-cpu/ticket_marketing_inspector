@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
@@ -42,6 +43,8 @@ func main() {
 		}
 	}
 
+	startHealthServer(cfg.Port)
+
 	loc, err := time.LoadLocation(cfg.CronTZ)
 	if err != nil {
 		log.Fatalf("zona horaria %s: %v", cfg.CronTZ, err)
@@ -62,6 +65,22 @@ func main() {
 	select {}
 }
 
+func startHealthServer(port string) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	addr := ":" + port
+	go func() {
+		log.Printf("HTTP health en http://0.0.0.0%s/health", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil {
+			log.Fatalf("http: %v", err)
+		}
+	}()
+}
+
 func ejecutarFlujo(cfg *Config, api *UbersmithClient, ia *Analizador, store *Store) error {
 	log.Println("Nodo 2: consultando tickets actualizados en los últimos 7 días...")
 	ticketsRaw, err := api.ListarTicketsActualizados()
@@ -71,7 +90,7 @@ func ejecutarFlujo(cfg *Config, api *UbersmithClient, ia *Analizador, store *Sto
 	log.Printf("API devolvió %d tickets", len(ticketsRaw))
 
 	tickets := filtrarTicketsValidos(ticketsRaw)
-	log.Printf("Nodo 3: %d tickets válidos (Solicitud Nueva + Residencial, sin test)", len(tickets))
+	log.Printf("Nodo 3: %d tickets válidos (Solicitud Nueva + Residencial, sin test/FX)", len(tickets))
 	if len(tickets) == 0 {
 		log.Println("No hay tickets para procesar")
 		return nil

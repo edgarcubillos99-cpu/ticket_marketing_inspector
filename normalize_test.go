@@ -40,6 +40,13 @@ func TestFiltrarTicketsValidos(t *testing.T) {
 			Timestamp: "50",
 			Metadata:  &TicketMetadata{SLA: "Residencial"},
 		},
+		"7": {
+			TicketID:  "7",
+			Subject:   "Solicitud Nueva - Fibra",
+			Timestamp: "600",
+			QName:     "Cola FX",
+			Metadata:  &TicketMetadata{SLA: "Residencial"},
+		},
 	}
 
 	got := filtrarTicketsValidos(tickets)

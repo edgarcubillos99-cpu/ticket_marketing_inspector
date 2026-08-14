@@ -26,6 +26,7 @@ type Config struct {
 	MySQLTable    string
 	MySQLTLS      string
 
+	Port       string
 	Workers    int
 	RunOnStart bool
 	CronSpec   string
@@ -49,6 +50,7 @@ func LoadConfig() (*Config, error) {
 		MySQLDatabase:    strings.TrimSpace(os.Getenv("MYSQL_DATABASE")),
 		MySQLTable:       envOr("MYSQL_TABLE", "tickets_osnet"),
 		MySQLTLS:         strings.TrimSpace(os.Getenv("MYSQL_TLS")),
+		Port:             envOr("PORT", "8080"),
 		Workers:          envInt("WORKERS", 3),
 		RunOnStart:       envBool("RUN_ON_START"),
 		CronSpec:         envOr("CRON_SPEC", "0 1 * * 0"),

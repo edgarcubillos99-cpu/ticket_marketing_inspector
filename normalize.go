@@ -21,8 +21,9 @@ func filtrarTicketsValidos(tickets map[string]TicketItem) []TicketItem {
 		esResidencial := ticket.Metadata != nil && ticket.Metadata.SLA.String() == "Residencial"
 		esTest := strings.Contains(subject, "solicitud de nuevo servicio test automatico") ||
 			strings.Contains(subject, "solicitud nueva test automatico")
+		esFX := strings.Contains(strings.ToUpper(ticket.QName.String()), "FX")
 
-		if contieneSolicitud && esResidencial && !esTest {
+		if contieneSolicitud && esResidencial && !esTest && !esFX {
 			validos = append(validos, ticket)
 		}
 	}

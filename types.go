@@ -36,6 +36,7 @@ type TicketItem struct {
 	Timestamp SoftString      `json:"timestamp"`
 	TypeName  SoftString      `json:"type_name"`
 	AdminName SoftString      `json:"admin_name"`
+	QName     SoftString      `json:"q_name"`
 	Metadata  *TicketMetadata `json:"metadata,omitempty"`
 }
 

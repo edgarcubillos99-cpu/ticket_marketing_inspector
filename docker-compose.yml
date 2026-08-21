@@ -24,6 +24,8 @@ services:
       RUN_ON_START: ${RUN_ON_START}
       CRON_SPEC: ${CRON_SPEC}
       CRON_TZ: ${CRON_TZ}
+      BACKFILL: ${BACKFILL:-false}
+      BACKFILL_FROM: ${BACKFILL_FROM:-2024-01-01}
     ports:
       - "${PORT:-8080}:${PORT:-8080}"
     healthcheck:

@@ -26,7 +26,7 @@ func NewUbersmithClient(cfg *Config) *UbersmithClient {
 		token:   cfg.UbersmithToken,
 		limit:   cfg.UbersmithLimit,
 		http: &http.Client{
-			Timeout: 60 * time.Second,
+			Timeout: 120 * time.Second,
 		},
 	}
 }
@@ -76,11 +76,18 @@ func (c *UbersmithClient) call(method string, params url.Values) (json.RawMessag
 
 // ListarTicketsActualizados replica el nodo 2: activity_begin = hace 7 días, internal_ticket=2.
 func (c *UbersmithClient) ListarTicketsActualizados() (map[string]TicketItem, error) {
-	haceUnaSemana := time.Now().Add(-7 * 24 * time.Hour).Unix()
+	haceUnaSemana := time.Now().Add(-7 * 24 * time.Hour)
+	return c.ListarTicketsEnRango(haceUnaSemana, time.Time{})
+}
+
+// ListarTicketsEnRango consulta support.ticket_list con activity_begin y, si end no es cero, activity_end.
+func (c *UbersmithClient) ListarTicketsEnRango(begin, end time.Time) (map[string]TicketItem, error) {
 	params := url.Values{}
-	params.Set("activity_begin", strconv.FormatInt(haceUnaSemana, 10))
+	params.Set("activity_begin", strconv.FormatInt(begin.Unix(), 10))
+	if !end.IsZero() {
+		params.Set("activity_end", strconv.FormatInt(end.Unix(), 10))
+	}
 	params.Set("internal_ticket", "2")
-	// Incluye todos los custom fields (sla, municipio, etc.) para el filtro del nodo 3.
 	params.Set("metadata", "1")
 	if c.limit > 0 {
 		params.Set("limit", strconv.Itoa(c.limit))
@@ -91,6 +98,24 @@ func (c *UbersmithClient) ListarTicketsActualizados() (map[string]TicketItem, er
 		return nil, err
 	}
 	return decodeTicketMap(raw)
+}
+
+func periodosMensuales(desde, hasta time.Time, loc *time.Location) [][2]time.Time {
+	desde = time.Date(desde.In(loc).Year(), desde.In(loc).Month(), 1, 0, 0, 0, 0, loc)
+	hasta = hasta.In(loc)
+	if !hasta.After(desde) {
+		return nil
+	}
+
+	var periodos [][2]time.Time
+	for cur := desde; cur.Before(hasta); cur = cur.AddDate(0, 1, 0) {
+		end := cur.AddDate(0, 1, 0)
+		if end.After(hasta) {
+			end = hasta
+		}
+		periodos = append(periodos, [2]time.Time{cur, end})
+	}
+	return periodos
 }
 
 // ObtenerTicket replica el nodo 5: support.ticket_get.

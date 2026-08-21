@@ -13,6 +13,7 @@ import (
 
 func main() {
 	once := flag.Bool("once", false, "Ejecuta el flujo una sola vez y termina")
+	backfill := flag.Bool("backfill", false, "Recorre mes a mes desde BACKFILL_FROM (2024-01-01) hasta hoy y termina")
 	flag.Parse()
 
 	cfg, err := LoadConfig()
@@ -33,6 +34,14 @@ func main() {
 		if err := ejecutarFlujo(cfg, ubersmith, analizador, store); err != nil {
 			log.Printf("flujo: %v", err)
 		}
+	}
+
+	if *backfill || cfg.Backfill {
+		log.Println("Ejecutando backfill mensual...")
+		if err := ejecutarBackfill(cfg, ubersmith, analizador, store); err != nil {
+			log.Fatalf("backfill: %v", err)
+		}
+		return
 	}
 
 	if *once || cfg.RunOnStart {
@@ -81,19 +90,64 @@ func startHealthServer(port string) {
 	}()
 }
 
+func ejecutarBackfill(cfg *Config, api *UbersmithClient, ia *Analizador, store *Store) error {
+	loc, err := time.LoadLocation(cfg.CronTZ)
+	if err != nil {
+		return fmt.Errorf("zona horaria %s: %w", cfg.CronTZ, err)
+	}
+
+	desde, err := time.ParseInLocation("2006-01-02", cfg.BackfillFrom, loc)
+	if err != nil {
+		return fmt.Errorf("BACKFILL_FROM %q: usa YYYY-MM-DD", cfg.BackfillFrom)
+	}
+
+	hasta := time.Now().In(loc)
+	periodos := periodosMensuales(desde, hasta, loc)
+	log.Printf("Backfill: %d periodos de %s a %s (%s)",
+		len(periodos), desde.Format("2006-01-02"), hasta.Format("2006-01-02 15:04:05"), loc)
+
+	okTotal, failTotal := 0, 0
+	for i, p := range periodos {
+		log.Printf("Periodo %d/%d: %s → %s", i+1, len(periodos),
+			p[0].Format("2006-01-02 15:04:05"), p[1].Format("2006-01-02 15:04:05"))
+		ok, fail, err := procesarRango(cfg, api, ia, store, p[0], p[1])
+		if err != nil {
+			return fmt.Errorf("periodo %s: %w", p[0].Format("2006-01"), err)
+		}
+		okTotal += ok
+		failTotal += fail
+	}
+
+	log.Printf("Backfill completado. OK=%d errores=%d", okTotal, failTotal)
+	return nil
+}
+
 func ejecutarFlujo(cfg *Config, api *UbersmithClient, ia *Analizador, store *Store) error {
 	log.Println("Nodo 2: consultando tickets actualizados en los últimos 7 días...")
 	ticketsRaw, err := api.ListarTicketsActualizados()
 	if err != nil {
 		return fmt.Errorf("ticket_list: %w", err)
 	}
+	_, _, err = procesarTickets(cfg, api, ia, store, ticketsRaw)
+	return err
+}
+
+func procesarRango(cfg *Config, api *UbersmithClient, ia *Analizador, store *Store, begin, end time.Time) (int, int, error) {
+	ticketsRaw, err := api.ListarTicketsEnRango(begin, end)
+	if err != nil {
+		return 0, 0, fmt.Errorf("ticket_list: %w", err)
+	}
+	return procesarTickets(cfg, api, ia, store, ticketsRaw)
+}
+
+func procesarTickets(cfg *Config, api *UbersmithClient, ia *Analizador, store *Store, ticketsRaw map[string]TicketItem) (int, int, error) {
 	log.Printf("API devolvió %d tickets", len(ticketsRaw))
 
 	tickets := filtrarTicketsValidos(ticketsRaw)
 	log.Printf("Nodo 3: %d tickets válidos (Solicitud Nueva + Residencial, sin test/FX)", len(tickets))
 	if len(tickets) == 0 {
 		log.Println("No hay tickets para procesar")
-		return nil
+		return 0, 0, nil
 	}
 
 	jobs := make(chan TicketItem, len(tickets))
@@ -133,7 +187,7 @@ func ejecutarFlujo(cfg *Config, api *UbersmithClient, ia *Analizador, store *Sto
 	wg.Wait()
 
 	log.Printf("Flujo completado. OK=%d errores=%d", ok, fail)
-	return nil
+	return ok, fail, nil
 }
 
 func procesarTicket(workerID int, api *UbersmithClient, ia *Analizador, store *Store, item TicketItem) error {

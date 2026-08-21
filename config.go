@@ -31,6 +31,9 @@ type Config struct {
 	RunOnStart bool
 	CronSpec   string
 	CronTZ     string
+
+	Backfill     bool
+	BackfillFrom string
 }
 
 func LoadConfig() (*Config, error) {
@@ -55,6 +58,8 @@ func LoadConfig() (*Config, error) {
 		RunOnStart:       envBool("RUN_ON_START"),
 		CronSpec:         envOr("CRON_SPEC", "0 1 * * 0"),
 		CronTZ:           envOr("CRON_TZ", "America/Puerto_Rico"),
+		Backfill:         envBool("BACKFILL"),
+		BackfillFrom:     envOr("BACKFILL_FROM", "2024-01-01"),
 	}
 
 	if cfg.Workers < 1 {

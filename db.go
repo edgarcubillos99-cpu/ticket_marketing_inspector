@@ -13,8 +13,10 @@ import (
 )
 
 type Store struct {
-	db    *sql.DB
-	table string
+	db          *sql.DB
+	table       string
+	socialTable string
+	adsTable    string
 }
 
 func NewStore(cfg *Config) (*Store, error) {
@@ -45,8 +47,28 @@ func NewStore(cfg *Config) (*Store, error) {
 		return nil, fmt.Errorf("conectar MySQL: %w", err)
 	}
 
-	store := &Store{db: db, table: sanitizeTableName(cfg.MySQLTable)}
+	store := &Store{
+		db:          db,
+		table:       sanitizeTableName(cfg.MySQLTable),
+		socialTable: sanitizeTableName(cfg.MySQLTableSocial),
+		adsTable:    sanitizeTableName(cfg.MySQLTableAds),
+	}
+	if store.socialTable == "tickets_osnet" {
+		store.socialTable = "redes_sociales_metricas"
+	}
+	if store.adsTable == "tickets_osnet" {
+		store.adsTable = "anuncios_metricas"
+	}
+
 	if err := store.ensureTable(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := store.ensureSocialTable(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := store.ensureAdsTable(); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -54,7 +76,7 @@ func NewStore(cfg *Config) (*Store, error) {
 }
 
 func (s *Store) ensureTable() error {
-	exists, err := s.tableExists()
+	exists, err := s.tableExists(s.table)
 	if err != nil {
 		return err
 	}
@@ -86,18 +108,85 @@ CREATE TABLE %s (
 	return nil
 }
 
-func (s *Store) tableExists() (bool, error) {
+func (s *Store) ensureSocialTable() error {
+	exists, err := s.tableExists(s.socialTable)
+	if err != nil {
+		return err
+	}
+	if exists {
+		log.Printf("MySQL: tabla %s encontrada", s.socialTable)
+		return nil
+	}
+
+	log.Printf("MySQL: tabla %s no existe, creándola...", s.socialTable)
+	q := fmt.Sprintf(`
+CREATE TABLE %s (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  plataforma VARCHAR(50) NOT NULL,
+  mes DATE NOT NULL,
+  alcance BIGINT NOT NULL DEFAULT 0,
+  likes_reacciones BIGINT NOT NULL DEFAULT 0,
+  comentarios BIGINT NOT NULL DEFAULT 0,
+  compartir BIGINT NOT NULL DEFAULT 0,
+  total_interacciones BIGINT NOT NULL DEFAULT 0,
+  seguidores_netos BIGINT NOT NULL DEFAULT 0,
+  total_seguidores BIGINT NOT NULL DEFAULT 0,
+  actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_plataforma_mes (plataforma, mes)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, s.socialTable)
+
+	if _, err := s.db.Exec(q); err != nil {
+		return fmt.Errorf("crear tabla %s: %w", s.socialTable, err)
+	}
+	log.Printf("MySQL: tabla %s creada", s.socialTable)
+	return nil
+}
+
+func (s *Store) ensureAdsTable() error {
+	exists, err := s.tableExists(s.adsTable)
+	if err != nil {
+		return err
+	}
+	if exists {
+		log.Printf("MySQL: tabla %s encontrada", s.adsTable)
+		return nil
+	}
+
+	log.Printf("MySQL: tabla %s no existe, creándola...", s.adsTable)
+	q := fmt.Sprintf(`
+CREATE TABLE %s (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  plataforma VARCHAR(50) NOT NULL,
+  tipo_cliente VARCHAR(50) NOT NULL,
+  mes DATE NOT NULL,
+  tipo_resultado VARCHAR(100) NOT NULL,
+  resultado BIGINT NOT NULL DEFAULT 0,
+  inversion DECIMAL(14,2) NOT NULL DEFAULT 0.00,
+  actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ads_plataforma_cliente_mes_resultado (plataforma, tipo_cliente, mes, tipo_resultado)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, s.adsTable)
+
+	if _, err := s.db.Exec(q); err != nil {
+		return fmt.Errorf("crear tabla %s: %w", s.adsTable, err)
+	}
+	log.Printf("MySQL: tabla %s creada", s.adsTable)
+	return nil
+}
+
+func (s *Store) tableExists(table string) (bool, error) {
 	var name string
 	err := s.db.QueryRow(`
 SELECT TABLE_NAME
 FROM information_schema.TABLES
 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
-LIMIT 1`, s.table).Scan(&name)
+LIMIT 1`, table).Scan(&name)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("verificar tabla %s: %w", s.table, err)
+		return false, fmt.Errorf("verificar tabla %s: %w", table, err)
 	}
 	return true, nil
 }
@@ -145,6 +234,72 @@ ON DUPLICATE KEY UPDATE
 	)
 	if err != nil {
 		return fmt.Errorf("upsert ticket %d: %w", ticketID, err)
+	}
+	return nil
+}
+
+func (s *Store) UpsertMetricaSocial(m MetricaRedSocial) error {
+	if strings.TrimSpace(m.Plataforma) == "" || m.Mes.IsZero() {
+		return fmt.Errorf("metrica social incompleta: plataforma/mes requeridos")
+	}
+	mes := m.Mes.Format("2006-01-02")
+
+	q := fmt.Sprintf(`
+INSERT INTO %s (
+  plataforma, mes, alcance, likes_reacciones, comentarios, compartir,
+  total_interacciones, seguidores_netos, total_seguidores
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+  alcance = VALUES(alcance),
+  likes_reacciones = VALUES(likes_reacciones),
+  comentarios = VALUES(comentarios),
+  compartir = VALUES(compartir),
+  total_interacciones = VALUES(total_interacciones),
+  seguidores_netos = VALUES(seguidores_netos),
+  total_seguidores = VALUES(total_seguidores)`, s.socialTable)
+
+	_, err := s.db.Exec(q,
+		recortarRunes(m.Plataforma, 50),
+		mes,
+		m.Alcance,
+		m.LikesReacciones,
+		m.Comentarios,
+		m.Compartir,
+		m.TotalInteracciones,
+		m.SeguidoresNetos,
+		m.TotalSeguidores,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert social %s %s: %w", m.Plataforma, mes, err)
+	}
+	return nil
+}
+
+func (s *Store) UpsertMetricaAnuncio(m MetricaAnuncio) error {
+	if strings.TrimSpace(m.Plataforma) == "" || strings.TrimSpace(m.TipoCliente) == "" ||
+		strings.TrimSpace(m.TipoResultado) == "" || m.Mes.IsZero() {
+		return fmt.Errorf("metrica anuncio incompleta: plataforma/tipo_cliente/mes/tipo_resultado requeridos")
+	}
+	mes := m.Mes.Format("2006-01-02")
+
+	q := fmt.Sprintf(`
+INSERT INTO %s (
+  plataforma, tipo_cliente, mes, tipo_resultado, resultado, inversion
+) VALUES (?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+  resultado = VALUES(resultado),
+  inversion = VALUES(inversion)`, s.adsTable)
+
+	_, err := s.db.Exec(q,
+		recortarRunes(m.Plataforma, 50),
+		recortarRunes(m.TipoCliente, 50),
+		mes,
+		recortarRunes(m.TipoResultado, 100),
+		m.Resultado,
+		m.Inversion,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert ads %s %s %s: %w", m.Plataforma, m.TipoCliente, mes, err)
 	}
 	return nil
 }

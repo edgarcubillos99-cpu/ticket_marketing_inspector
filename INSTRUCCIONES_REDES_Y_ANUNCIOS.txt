@@ -1,0 +1,254 @@
+================================================================================
+INSTRUCCIONES: Redes sociales y anuncios — datos que faltan para activar el sync
+Proyecto: Marketing-solicitudes (agente_marketing)
+================================================================================
+
+El código ya está listo. Solo necesitas crear apps en cada plataforma, obtener
+credenciales y completar el archivo .env (usa .env.example como plantilla).
+
+Cada domingo (CRON_SPEC) el agente:
+  1) Sincroniza tickets de Ubersmith (como antes)
+  2) Trae métricas orgánicas de Facebook / Instagram / LinkedIn
+  3) Trae rendimiento de anuncios de Google / Facebook / Instagram / LinkedIn
+  4) Guarda todo en MySQL (tablas propias, upsert)
+
+Tablas nuevas (se crean solas al arrancar si no existen):
+  - redes_sociales_metricas
+  - anuncios_metricas
+
+Prueba manual solo de marketing:
+  go run . -marketing-only
+
+Backfill histórico (tickets + marketing desde BACKFILL_FROM):
+  BACKFILL=true BACKFILL_FROM=2023-01-01 go run . -backfill
+
+
+--------------------------------------------------------------------------------
+A) QUÉ INFORMACIÓN NECESITAS (checklist)
+--------------------------------------------------------------------------------
+
+[ ] Acceso de administrador a la Facebook Page de la empresa
+[ ] Instagram Business/Creator vinculado a esa Facebook Page
+[ ] Acceso a Meta Business Manager / Ads Manager (cuenta publicitaria)
+[ ] Acceso de admin a la página de LinkedIn Company
+[ ] Acceso a LinkedIn Campaign Manager (cuenta de anuncios)
+[ ] Acceso a Google Ads (cuenta de la empresa o MCC)
+[ ] Una cuenta de Google Cloud para OAuth (cliente OAuth 2.0)
+[ ] Convención de nombres de campañas Residencial vs Comercial
+    (o ajustar ADS_RESIDENCIAL_PATTERN / ADS_COMERCIAL_PATTERN)
+
+
+--------------------------------------------------------------------------------
+B) META — Facebook + Instagram (orgánico) y Meta Ads
+--------------------------------------------------------------------------------
+
+1) Crear app en Meta for Developers
+   URL: https://developers.facebook.com/apps/
+   - Create App → tipo Business
+   - Agregar productos: Facebook Login for Business, Marketing API (si aplica)
+
+2) Permisos / scopes necesarios en el token de página (larga duración):
+   - pages_show_list
+   - pages_read_engagement
+   - pages_read_user_content
+   - read_insights
+   - instagram_basic
+   - instagram_manage_insights
+   - ads_read
+   - business_management (si la cuenta ads está en Business Manager)
+
+3) Obtener FACEBOOK_PAGE_ID
+   - En la Page → About / Page transparency, o
+   - Graph API Explorer: GET /me/accounts
+   - El campo "id" de la página es FACEBOOK_PAGE_ID
+
+4) Obtener INSTAGRAM_BUSINESS_ACCOUNT_ID
+   - GET /{FACEBOOK_PAGE_ID}?fields=instagram_business_account
+   - Usar el id devuelto en instagram_business_account
+
+5) Obtener META_ACCESS_TOKEN (Page Access Token de larga duración)
+   a) Genera User Token corto con los permisos de arriba (Graph API Explorer
+      o Facebook Login).
+   b) Intercámbialo por User Token largo:
+      GET https://graph.facebook.com/v21.0/oauth/access_token
+        ?grant_type=fb_exchange_token
+        &client_id={APP_ID}
+        &client_secret={APP_SECRET}
+        &fb_exchange_token={SHORT_TOKEN}
+   c) Obtén Page Token a partir del User Token largo:
+      GET /me/accounts
+      → access_token de la página (no expira mientras no se cambie la password
+        de la persona/app ni se revoque).
+   d) Ese Page Token va en META_ACCESS_TOKEN
+
+6) Obtener META_AD_ACCOUNT_ID
+   - Meta Business Suite → Ads Manager → Settings
+   - O Graph: GET /me/adaccounts
+   - Usa solo el número (sin "act_"). Ejemplo: act_1234567890 → 1234567890
+
+Variables .env:
+  META_ACCESS_TOKEN=
+  META_API_VERSION=v21.0
+  FACEBOOK_PAGE_ID=
+  INSTAGRAM_BUSINESS_ACCOUNT_ID=
+  META_AD_ACCOUNT_ID=
+
+
+--------------------------------------------------------------------------------
+C) LINKEDIN — Página de empresa (orgánico) + Ads
+--------------------------------------------------------------------------------
+
+1) Crear app en LinkedIn Developer Portal
+   URL: https://www.linkedin.com/developers/apps
+   - Create app → asociar a la Company Page
+   - Solicitar productos:
+     * Community Management API (u Organization Access) para estadísticas
+       de página / share statistics / followers
+     * Advertising API / Marketing Developer Platform para ads reporting
+   - Nota: LinkedIn suele exigir revisión (App Review) antes de scopes de ads
+     y de organización. Presupuesta tiempo de aprobación.
+
+2) Scopes típicos del access token:
+   - r_organization_social
+   - rw_organization_admin   (o el scope vigente de admin de organización)
+   - r_ads
+   - r_ads_reporting
+
+3) Obtener LINKEDIN_ORGANIZATION_ID
+   - En la URL de la Company Page a veces aparece; o
+   - API: GET https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee
+   - Usa solo el número (sin urn:li:organization:)
+
+4) Obtener LINKEDIN_AD_ACCOUNT_ID
+   - Campaign Manager → Account settings
+   - O API de adAccounts
+   - Solo el número de sponsoredAccount
+
+5) Obtener LINKEDIN_ACCESS_TOKEN
+   - Flujo OAuth 2.0 Authorization Code de la app
+   - Ideal: token de larga duración / refresh según el producto aprobado
+   - Si el token expira, habrá que renovarlo (o automatizar refresh más adelante)
+
+Variables .env:
+  LINKEDIN_ACCESS_TOKEN=
+  LINKEDIN_API_VERSION=202411
+  LINKEDIN_ORGANIZATION_ID=
+  LINKEDIN_AD_ACCOUNT_ID=
+
+
+--------------------------------------------------------------------------------
+D) GOOGLE ADS
+--------------------------------------------------------------------------------
+
+1) Acceso a la cuenta Google Ads de la empresa (o MCC que la administra).
+
+2) Developer Token
+   URL: https://ads.google.com/aw/apicenter
+   - Solicita Developer Token (Test primero; para producción requiere aprobación)
+   → GOOGLE_ADS_DEVELOPER_TOKEN
+
+3) Proyecto OAuth en Google Cloud Console
+   URL: https://console.cloud.google.com/apis/credentials
+   - Crear OAuth client ID (tipo Desktop o Web)
+   → GOOGLE_ADS_CLIENT_ID
+   → GOOGLE_ADS_CLIENT_SECRET
+   - Habilitar "Google Ads API" en APIs & Services
+
+4) Refresh Token
+   - Autoriza una vez con una cuenta que tenga acceso a la cuenta Ads
+   - Herramientas comunes:
+     * OAuth Playground (https://developers.google.com/oauthplayground)
+       scope: https://www.googleapis.com/auth/adwords
+     * o el script oficial de Google Ads API para generar refresh token
+   → GOOGLE_ADS_REFRESH_TOKEN
+
+5) Customer IDs
+   - En Google Ads, esquina superior: Customer ID (formato 123-456-7890)
+   → GOOGLE_ADS_CUSTOMER_ID=1234567890  (sin guiones)
+   - Si entras vía MCC:
+   → GOOGLE_ADS_LOGIN_CUSTOMER_ID=<id del MCC sin guiones>
+
+Variables .env:
+  GOOGLE_ADS_DEVELOPER_TOKEN=
+  GOOGLE_ADS_CLIENT_ID=
+  GOOGLE_ADS_CLIENT_SECRET=
+  GOOGLE_ADS_REFRESH_TOKEN=
+  GOOGLE_ADS_CUSTOMER_ID=
+  # GOOGLE_ADS_LOGIN_CUSTOMER_ID=
+  GOOGLE_ADS_API_VERSION=v18
+
+
+--------------------------------------------------------------------------------
+E) CLASIFICACIÓN Residencial / Comercial (crítico para anuncios)
+--------------------------------------------------------------------------------
+
+El reporte separa filas por "Tipo de Cliente". El agente lo infiere del
+NOMBRE DE LA CAMPAÑA con regex:
+
+  ADS_RESIDENCIAL_PATTERN=(?i)residenc|residential|\bres\b
+  ADS_COMERCIAL_PATTERN=(?i)comercial|commercial|business|\bcom\b|\bb2b\b
+
+Qué debes hacer en las cuentas de anuncios:
+  - Incluir "Residencial" o "Res" / "Comercial" o "B2B" en el nombre de campaña
+  - O ajustar los regex a la convención real de la empresa
+
+Si una campaña no hace match:
+  - Google/Meta: se omite (no se guarda)
+  - LinkedIn: por defecto se clasifica como Comercial (histórico del reporte)
+
+
+--------------------------------------------------------------------------------
+F) MAPEO DE MÉTRICAS (cómo se llena cada columna)
+--------------------------------------------------------------------------------
+
+REDES (tabla redes_sociales_metricas):
+  Plataforma          → Facebook | Instagram | LinkedIn
+  Mes                 → primer día del mes (DATE)
+  Alcance             → reach / unique impressions del mes
+  Likes / Reacciones  → likes/reactions de posts del mes
+  Comentarios         → comments del mes
+  Compartir           → shares del mes
+  Total Interacciones → likes + comentarios + shares
+  Seguidores Netos    → altas − bajas (o delta del mes)
+  Total Seguidores    → followers al cierre del periodo
+
+ANUNCIOS (tabla anuncios_metricas):
+  Plataforma          → Google | Facebook | Instagram | LinkedIn
+  Tipo de Cliente     → Residencial | Comercial (por nombre de campaña)
+  Mes                 → primer día del mes
+  Tipo de Resultado   →
+      Google / LinkedIn     → Clics
+      Facebook Residencial  → Mensajes (messaging conversations)
+      Instagram             → Interacciones (post engagement)
+  Resultado (#)       → cantidad del KPI anterior
+  Inversión           → spend / cost del periodo (moneda de la cuenta)
+
+
+--------------------------------------------------------------------------------
+G) ORDEN RECOMENDADO PARA ACTIVAR
+--------------------------------------------------------------------------------
+
+1. Completar Meta (orgánico FB+IG) → probar: go run . -marketing-only
+2. Completar Meta Ads (META_AD_ACCOUNT_ID)
+3. Completar Google Ads
+4. Completar LinkedIn orgánico
+5. Completar LinkedIn Ads (puede tardar por App Review)
+6. Ajustar regex de campañas según nombres reales
+7. (Opcional) BACKFILL_FROM=2023-01-01 para histórico
+
+Si alguna plataforma falla, las demás siguen; el error queda en el log.
+Sin credenciales de marketing, Ubersmith continúa igual que antes.
+
+
+--------------------------------------------------------------------------------
+H) CONTACTOS / DUEÑOS DE CUENTA (rellenar internamente)
+--------------------------------------------------------------------------------
+
+Facebook / Instagram Page admin: ____________________
+Meta Business / Ads:             ____________________
+LinkedIn Company admin:          ____________________
+LinkedIn Campaign Manager:       ____________________
+Google Ads / MCC:                ____________________
+Quién creará las Developer Apps: ____________________
+
+================================================================================

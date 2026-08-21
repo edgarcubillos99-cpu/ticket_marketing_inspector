@@ -14,6 +14,7 @@ import (
 func main() {
 	once := flag.Bool("once", false, "Ejecuta el flujo una sola vez y termina")
 	backfill := flag.Bool("backfill", false, "Recorre mes a mes desde BACKFILL_FROM (2024-01-01) hasta hoy y termina")
+	marketingOnly := flag.Bool("marketing-only", false, "Ejecuta solo sincronización de redes/ads y termina")
 	flag.Parse()
 
 	cfg, err := LoadConfig()
@@ -32,14 +33,28 @@ func main() {
 
 	run := func() {
 		if err := ejecutarFlujo(cfg, ubersmith, analizador, store); err != nil {
-			log.Printf("flujo: %v", err)
+			log.Printf("flujo tickets: %v", err)
 		}
+		if err := ejecutarFlujoMarketing(cfg, store); err != nil {
+			log.Printf("flujo marketing: %v", err)
+		}
+	}
+
+	if *marketingOnly {
+		log.Println("Ejecutando solo marketing (redes/ads)...")
+		if err := ejecutarFlujoMarketing(cfg, store); err != nil {
+			log.Fatalf("marketing: %v", err)
+		}
+		return
 	}
 
 	if *backfill || cfg.Backfill {
 		log.Println("Ejecutando backfill mensual...")
 		if err := ejecutarBackfill(cfg, ubersmith, analizador, store); err != nil {
 			log.Fatalf("backfill: %v", err)
+		}
+		if err := ejecutarBackfillMarketing(cfg, store); err != nil {
+			log.Fatalf("backfill marketing: %v", err)
 		}
 		return
 	}
@@ -69,6 +84,11 @@ func main() {
 	if len(entries) > 0 {
 		log.Printf("Scheduler activo (%s %s). Próxima ejecución: %s",
 			cfg.CronSpec, cfg.CronTZ, entries[0].Next.Format(time.RFC3339))
+	}
+	if cfg.MarketingEnabled() {
+		log.Println("Marketing (redes/ads): habilitado en el mismo cron semanal")
+	} else {
+		log.Println("Marketing (redes/ads): deshabilitado hasta completar variables en .env")
 	}
 
 	select {}

@@ -58,7 +58,8 @@ func sincronizarMarketingRango(cfg *Config, store *Store, desde, hasta time.Time
 			if err != nil {
 				log.Printf("meta organico: %v", err)
 				socialFail++
-			} else {
+			}
+			if len(rows) > 0 {
 				ok, fail := guardarSocial(store, rows)
 				socialOK += ok
 				socialFail += fail

@@ -88,10 +88,15 @@ B) META — Facebook + Instagram (orgánico) y Meta Ads
 
 Variables .env:
   META_ACCESS_TOKEN=
-  META_API_VERSION=v21.0
+  META_API_VERSION=v26.0
   FACEBOOK_PAGE_ID=
   INSTAGRAM_BUSINESS_ACCOUNT_ID=
   META_AD_ACCOUNT_ID=
+
+Nota (Page Insights, post-nov 2025):
+  - Alcance FB usa page_total_media_view_unique (no page_impressions*)
+  - Seguidores FB usa page_follows (no page_fans / page_fan_*)
+  - Engagement FB se calcula desde published_posts (likes/comments/shares)
 
 
 --------------------------------------------------------------------------------
@@ -193,7 +198,8 @@ Qué debes hacer en las cuentas de anuncios:
   - O ajustar los regex a la convención real de la empresa
 
 Si una campaña no hace match:
-  - Google/Meta: se omite (no se guarda)
+  - Google: se omite (no se guarda)
+  - Meta: se clasifica como Residencial (nombres AO/BTS/Formularios no llevan la etiqueta)
   - LinkedIn: por defecto se clasifica como Comercial (histórico del reporte)
 
 
@@ -204,7 +210,7 @@ F) MAPEO DE MÉTRICAS (cómo se llena cada columna)
 REDES (tabla redes_sociales_metricas):
   Plataforma          → Facebook | Instagram | LinkedIn
   Mes                 → primer día del mes (DATE)
-  Alcance             → reach / unique impressions del mes
+  Alcance             → reach / viewers únicos del mes (FB: page_total_media_view_unique)
   Likes / Reacciones  → likes/reactions de posts del mes
   Comentarios         → comments del mes
   Compartir           → shares del mes

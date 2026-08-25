@@ -99,7 +99,7 @@ func LoadConfig() (*Config, error) {
 		MarketingMonthsLookback: envInt("MARKETING_MONTHS_LOOKBACK", 3),
 
 		MetaAccessToken:            strings.TrimSpace(os.Getenv("META_ACCESS_TOKEN")),
-		MetaAPIVersion:             envOr("META_API_VERSION", "v21.0"),
+		MetaAPIVersion:             envOr("META_API_VERSION", "v26.0"),
 		FacebookPageID:             strings.TrimSpace(os.Getenv("FACEBOOK_PAGE_ID")),
 		InstagramBusinessAccountID: strings.TrimSpace(os.Getenv("INSTAGRAM_BUSINESS_ACCOUNT_ID")),
 		MetaAdAccountID:            strings.TrimLeft(strings.TrimSpace(os.Getenv("META_AD_ACCOUNT_ID")), "act_"),

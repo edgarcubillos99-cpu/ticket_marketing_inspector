@@ -94,13 +94,15 @@ func (c *MetaClient) get(path string, params url.Values, out any) error {
 // FetchOrganico obtiene métricas mensuales de Facebook Page e Instagram Business.
 func (c *MetaClient) FetchOrganico(desde, hasta time.Time, loc *time.Location) ([]MetricaRedSocial, error) {
 	var out []MetricaRedSocial
+	var errs []string
 	meses := mesesEnRango(desde, hasta, loc)
 
 	if c.pageID != "" {
 		for _, mes := range meses {
 			m, err := c.facebookMes(mes, loc)
 			if err != nil {
-				return nil, fmt.Errorf("facebook %s: %w", mes.Format("2006-01"), err)
+				errs = append(errs, fmt.Sprintf("facebook %s: %v", mes.Format("2006-01"), err))
+				continue
 			}
 			out = append(out, m)
 		}
@@ -110,27 +112,52 @@ func (c *MetaClient) FetchOrganico(desde, hasta time.Time, loc *time.Location) (
 		for _, mes := range meses {
 			m, err := c.instagramMes(mes, loc)
 			if err != nil {
-				return nil, fmt.Errorf("instagram %s: %w", mes.Format("2006-01"), err)
+				errs = append(errs, fmt.Sprintf("instagram %s: %v", mes.Format("2006-01"), err))
+				continue
 			}
 			out = append(out, m)
 		}
 	}
 
-	return out, nil
+	if len(errs) == 0 {
+		return out, nil
+	}
+	joined := strings.Join(errs, "; ")
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%s", joined)
+	}
+	return out, fmt.Errorf("%s", joined)
+}
+
+// rangoInsightsMes acota [inicio, fin) al mes y al instante actual (Meta rechaza since futuro).
+func rangoInsightsMes(mes time.Time, loc *time.Location) (inicio, fin time.Time, ok bool) {
+	inicio = primerDiaMes(mes, loc)
+	fin = inicio.AddDate(0, 1, 0)
+	now := time.Now().In(loc)
+	if !inicio.Before(now) {
+		return inicio, fin, false
+	}
+	if fin.After(now) {
+		fin = now
+	}
+	return inicio, fin, inicio.Before(fin)
 }
 
 func (c *MetaClient) facebookMes(mes time.Time, loc *time.Location) (MetricaRedSocial, error) {
-	inicio := primerDiaMes(mes, loc)
-	fin := inicio.AddDate(0, 1, 0)
+	inicio, fin, ok := rangoInsightsMes(mes, loc)
+	if !ok {
+		return MetricaRedSocial{}, fmt.Errorf("sin datos disponibles aún para el mes")
+	}
 	since := strconv.FormatInt(inicio.Unix(), 10)
 	until := strconv.FormatInt(fin.Unix(), 10)
 
 	m := MetricaRedSocial{
 		Plataforma: PlataformaFacebook,
-		Mes:        inicio,
+		Mes:        primerDiaMes(mes, loc),
 	}
 
-	// Alcance (impresiones únicas de página) + fans al cierre del periodo.
+	// Alcance (viewers únicos) + follows al cierre del periodo.
+	// page_impressions_* / page_fans / page_fan_* fueron deprecados (nov 2025).
 	type insightResp struct {
 		Data []struct {
 			Name   string `json:"name"`
@@ -144,7 +171,7 @@ func (c *MetaClient) facebookMes(mes time.Time, loc *time.Location) (MetricaRedS
 
 	var insights insightResp
 	params := url.Values{}
-	params.Set("metric", "page_impressions_unique,page_fans,page_fan_adds_unique,page_fan_removes_unique,page_post_engagements")
+	params.Set("metric", "page_total_media_view_unique,page_follows")
 	params.Set("period", "day")
 	params.Set("since", since)
 	params.Set("until", until)
@@ -154,19 +181,16 @@ func (c *MetaClient) facebookMes(mes time.Time, loc *time.Location) (MetricaRedS
 
 	for _, d := range insights.Data {
 		switch d.Name {
-		case "page_impressions_unique":
+		case "page_total_media_view_unique":
 			m.Alcance = sumInsightValues(d.Values)
-		case "page_post_engagements":
-			// engagements agregados; likes/comentarios/shares se refinan con posts
-			_ = d
-		case "page_fans":
-			if v, ok := lastInsightInt(d.Values); ok {
-				m.TotalSeguidores = v
+		case "page_follows":
+			if len(d.Values) == 0 {
+				continue
 			}
-		case "page_fan_adds_unique":
-			m.SeguidoresNetos += sumInsightValues(d.Values)
-		case "page_fan_removes_unique":
-			m.SeguidoresNetos -= sumInsightValues(d.Values)
+			first := parseJSONInt(d.Values[0].Value)
+			last := parseJSONInt(d.Values[len(d.Values)-1].Value)
+			m.TotalSeguidores = last
+			m.SeguidoresNetos = last - first
 		}
 	}
 
@@ -243,18 +267,22 @@ func (c *MetaClient) agregarEngagementPostsFacebook(inicio, fin time.Time) (like
 	return likes, comments, shares, nil
 }
 
+// Instagram Insights rechaza ventanas > 30 días entre since y until.
+const maxIGInsightSpan = 30 * 24 * time.Hour
+
 func (c *MetaClient) instagramMes(mes time.Time, loc *time.Location) (MetricaRedSocial, error) {
-	inicio := primerDiaMes(mes, loc)
-	fin := inicio.AddDate(0, 1, 0)
-	since := strconv.FormatInt(inicio.Unix(), 10)
-	until := strconv.FormatInt(fin.Unix(), 10)
+	inicio, fin, ok := rangoInsightsMes(mes, loc)
+	if !ok {
+		return MetricaRedSocial{}, fmt.Errorf("sin datos disponibles aún para el mes")
+	}
 
 	m := MetricaRedSocial{
 		Plataforma: PlataformaInstagram,
-		Mes:        inicio,
+		Mes:        primerDiaMes(mes, loc),
 	}
 
-	// Reach diario + follower_count (solo lifetime/day según API).
+	// Reach diario. follower_count (insights) = altas nuevas por día, NO el total.
+	// Total actual: campo followers_count del IG User.
 	type insightResp struct {
 		Data []struct {
 			Name   string `json:"name"`
@@ -265,37 +293,45 @@ func (c *MetaClient) instagramMes(mes time.Time, loc *time.Location) (MetricaRed
 		} `json:"data"`
 	}
 
-	var reach insightResp
-	params := url.Values{}
-	params.Set("metric", "reach")
-	params.Set("period", "day")
-	params.Set("since", since)
-	params.Set("until", until)
-	if err := c.get("/"+c.igUserID+"/insights", params, &reach); err != nil {
-		return m, err
+	var profile struct {
+		FollowersCount int64 `json:"followers_count"`
 	}
-	for _, d := range reach.Data {
-		if d.Name == "reach" {
-			m.Alcance = sumInsightValues(d.Values)
-		}
+	if err := c.get("/"+c.igUserID, url.Values{"fields": []string{"followers_count"}}, &profile); err == nil {
+		m.TotalSeguidores = profile.FollowersCount
 	}
 
-	// Seguidores diarios del mes → total al cierre y neto (último − primero).
-	var followers insightResp
-	fp := url.Values{}
-	fp.Set("metric", "follower_count")
-	fp.Set("period", "day")
-	fp.Set("since", since)
-	fp.Set("until", until)
-	if err := c.get("/"+c.igUserID+"/insights", fp, &followers); err == nil {
-		for _, d := range followers.Data {
-			if d.Name != "follower_count" || len(d.Values) == 0 {
-				continue
+	for _, w := range insightWindows(inicio, fin, maxIGInsightSpan) {
+		since := strconv.FormatInt(w[0].Unix(), 10)
+		until := strconv.FormatInt(w[1].Unix(), 10)
+
+		var reach insightResp
+		params := url.Values{}
+		params.Set("metric", "reach")
+		params.Set("period", "day")
+		params.Set("since", since)
+		params.Set("until", until)
+		if err := c.get("/"+c.igUserID+"/insights", params, &reach); err != nil {
+			return m, err
+		}
+		for _, d := range reach.Data {
+			if d.Name == "reach" {
+				m.Alcance += sumInsightValues(d.Values)
 			}
-			first := parseJSONInt(d.Values[0].Value)
-			last := parseJSONInt(d.Values[len(d.Values)-1].Value)
-			m.TotalSeguidores = last
-			m.SeguidoresNetos = last - first
+		}
+
+		var followers insightResp
+		fp := url.Values{}
+		fp.Set("metric", "follower_count")
+		fp.Set("period", "day")
+		fp.Set("since", since)
+		fp.Set("until", until)
+		if err := c.get("/"+c.igUserID+"/insights", fp, &followers); err != nil {
+			continue
+		}
+		for _, d := range followers.Data {
+			if d.Name == "follower_count" {
+				m.SeguidoresNetos += sumInsightValues(d.Values)
+			}
 		}
 	}
 
@@ -310,26 +346,39 @@ func (c *MetaClient) instagramMes(mes time.Time, loc *time.Location) (MetricaRed
 	return m, nil
 }
 
+// insightWindows parte [inicio, fin) en tramos de a lo sumo maxSpan (límite de IG Insights).
+func insightWindows(inicio, fin time.Time, maxSpan time.Duration) [][2]time.Time {
+	if !inicio.Before(fin) || maxSpan <= 0 {
+		return nil
+	}
+	var out [][2]time.Time
+	cur := inicio
+	for cur.Before(fin) {
+		next := cur.Add(maxSpan)
+		if next.After(fin) {
+			next = fin
+		}
+		out = append(out, [2]time.Time{cur, next})
+		cur = next
+	}
+	return out
+}
+
 func (c *MetaClient) agregarEngagementMediaInstagram(inicio, fin time.Time) (likes, comments, shares int64, err error) {
+	// No pedir insights embebidos: falla (#2108006) si el media es anterior a la
+	// conversión a cuenta Business. likes/comments vienen del objeto; shares aparte.
 	params := url.Values{}
-	params.Set("fields", "id,timestamp,like_count,comments_count,insights.metric(shares,saved,total_interactions)")
+	params.Set("fields", "id,timestamp,like_count,comments_count")
 	params.Set("limit", "100")
 
 	path := "/" + c.igUserID + "/media"
 	for path != "" {
 		var page struct {
 			Data []struct {
+				ID            string `json:"id"`
 				Timestamp     string `json:"timestamp"`
 				LikeCount     int64  `json:"like_count"`
 				CommentsCount int64  `json:"comments_count"`
-				Insights      *struct {
-					Data []struct {
-						Name   string `json:"name"`
-						Values []struct {
-							Value json.RawMessage `json:"value"`
-						} `json:"values"`
-					} `json:"data"`
-				} `json:"insights"`
 			} `json:"data"`
 			Paging *struct {
 				Next string `json:"next"`
@@ -348,7 +397,7 @@ func (c *MetaClient) agregarEngagementMediaInstagram(inicio, fin time.Time) (lik
 		}
 
 		for _, media := range page.Data {
-			ts, parseErr := time.Parse(time.RFC3339, media.Timestamp)
+			ts, parseErr := parseMetaTime(media.Timestamp)
 			if parseErr != nil {
 				continue
 			}
@@ -357,13 +406,7 @@ func (c *MetaClient) agregarEngagementMediaInstagram(inicio, fin time.Time) (lik
 			}
 			likes += media.LikeCount
 			comments += media.CommentsCount
-			if media.Insights != nil {
-				for _, d := range media.Insights.Data {
-					if d.Name == "shares" && len(d.Values) > 0 {
-						shares += parseJSONInt(d.Values[0].Value)
-					}
-				}
-			}
+			shares += c.igMediaShares(media.ID)
 		}
 
 		if page.Paging != nil && page.Paging.Next != "" {
@@ -373,6 +416,33 @@ func (c *MetaClient) agregarEngagementMediaInstagram(inicio, fin time.Time) (lik
 		}
 	}
 	return likes, comments, shares, nil
+}
+
+// igMediaShares intenta shares del media; 0 si no aplica (stories, pre-Business, etc.).
+func (c *MetaClient) igMediaShares(mediaID string) int64 {
+	if mediaID == "" {
+		return 0
+	}
+	type insightResp struct {
+		Data []struct {
+			Name   string `json:"name"`
+			Values []struct {
+				Value json.RawMessage `json:"value"`
+			} `json:"values"`
+		} `json:"data"`
+	}
+	var out insightResp
+	params := url.Values{}
+	params.Set("metric", "shares")
+	if err := c.get("/"+mediaID+"/insights", params, &out); err != nil {
+		return 0
+	}
+	for _, d := range out.Data {
+		if d.Name == "shares" && len(d.Values) > 0 {
+			return parseJSONInt(d.Values[0].Value)
+		}
+	}
+	return 0
 }
 
 // FetchAds obtiene insights mensuales de Meta Ads (Facebook + Instagram por publisher_platform).
@@ -385,7 +455,8 @@ func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]Met
 	finExcl := primerDiaMes(hasta, loc).AddDate(0, 1, 0)
 
 	params := url.Values{}
-	params.Set("fields", "campaign_name,spend,clicks,actions,publisher_platform")
+	// publisher_platform solo en breakdowns (no en fields).
+	params.Set("fields", "campaign_name,spend,clicks,actions")
 	params.Set("level", "campaign")
 	params.Set("time_increment", "monthly")
 	params.Set("breakdowns", "publisher_platform")
@@ -429,7 +500,9 @@ func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]Met
 		for _, r := range page.Data {
 			tipoCliente := c.class.ClasificarTipoCliente(r.CampaignName)
 			if tipoCliente == "" {
-				continue
+				// Campañas Meta de Osnet no usan "Residencial/Comercial" en el nombre;
+				// por defecto Residencial (LinkedIn defaulta Comercial).
+				tipoCliente = TipoClienteResidencial
 			}
 			plataforma := mapPublisherPlatform(r.PublisherPlatform)
 			if plataforma == "" {
@@ -565,16 +638,6 @@ func sumInsightValues(values []struct {
 	return sum
 }
 
-func lastInsightInt(values []struct {
-	Value   json.RawMessage `json:"value"`
-	EndTime string          `json:"end_time"`
-}) (int64, bool) {
-	if len(values) == 0 {
-		return 0, false
-	}
-	return parseJSONInt(values[len(values)-1].Value), true
-}
-
 func parseJSONInt(raw json.RawMessage) int64 {
 	raw = json.RawMessage(strings.TrimSpace(string(raw)))
 	if len(raw) == 0 || string(raw) == "null" {
@@ -609,4 +672,13 @@ func parseJSONInt(raw json.RawMessage) int64 {
 		return sum
 	}
 	return 0
+}
+
+// parseMetaTime acepta timestamps Graph (+0000) y RFC3339 (+00:00).
+func parseMetaTime(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	return time.Parse("2006-01-02T15:04:05Z0700", s)
 }

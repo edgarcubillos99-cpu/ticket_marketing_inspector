@@ -456,7 +456,7 @@ func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]Met
 
 	params := url.Values{}
 	// publisher_platform solo en breakdowns (no en fields).
-	params.Set("fields", "campaign_name,spend,clicks,actions")
+	params.Set("fields", "campaign_name,spend,clicks,actions,reach,video_thruplay_watched_actions")
 	params.Set("level", "campaign")
 	params.Set("time_increment", "monthly")
 	params.Set("breakdowns", "publisher_platform")
@@ -465,15 +465,14 @@ func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]Met
 	params.Set("limit", "500")
 
 	type row struct {
-		CampaignName      string `json:"campaign_name"`
-		Spend             string `json:"spend"`
-		Clicks            string `json:"clicks"`
-		PublisherPlatform string `json:"publisher_platform"`
-		DateStart         string `json:"date_start"`
-		Actions           []struct {
-			ActionType string `json:"action_type"`
-			Value      string `json:"value"`
-		} `json:"actions"`
+		CampaignName                string          `json:"campaign_name"`
+		Spend                       string          `json:"spend"`
+		Clicks                      string          `json:"clicks"`
+		Reach                       string          `json:"reach"`
+		PublisherPlatform           string          `json:"publisher_platform"`
+		DateStart                   string          `json:"date_start"`
+		Actions                     []metaActionRaw `json:"actions"`
+		VideoThruplayWatchedActions []metaActionRaw `json:"video_thruplay_watched_actions"`
 	}
 
 	agg := map[string]*MetricaAnuncio{}
@@ -514,21 +513,24 @@ func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]Met
 			}
 			mes = primerDiaMes(mes, loc)
 
-			tipoResultado, resultado := metaResultado(plataforma, tipoCliente, r.Clicks, toMetaActions(r.Actions))
 			spend, _ := strconv.ParseFloat(r.Spend, 64)
+			actions := metaActionsFromRaw(r.Actions)
+			thruplay := metaActionsFromRaw(r.VideoThruplayWatchedActions)
 
-			key := plataforma + "|" + tipoCliente + "|" + mes.Format("2006-01") + "|" + tipoResultado
-			if cur, ok := agg[key]; ok {
-				cur.Resultado += resultado
-				cur.Inversion += spend
-			} else {
-				agg[key] = &MetricaAnuncio{
-					Plataforma:    plataforma,
-					TipoCliente:   tipoCliente,
-					Mes:           mes,
-					TipoResultado: tipoResultado,
-					Resultado:     resultado,
-					Inversion:     spend,
+			for _, kpi := range metaKPIs(plataforma, r.Clicks, r.Reach, actions, thruplay) {
+				key := plataforma + "|" + tipoCliente + "|" + mes.Format("2006-01") + "|" + kpi.Tipo
+				if cur, ok := agg[key]; ok {
+					cur.Resultado += kpi.Valor
+					cur.Inversion += spend
+				} else {
+					agg[key] = &MetricaAnuncio{
+						Plataforma:    plataforma,
+						TipoCliente:   tipoCliente,
+						Mes:           mes,
+						TipoResultado: kpi.Tipo,
+						Resultado:     kpi.Valor,
+						Inversion:     spend,
+					}
 				}
 			}
 		}
@@ -560,15 +562,22 @@ func mapPublisherPlatform(p string) string {
 	}
 }
 
+type metaActionRaw struct {
+	ActionType string `json:"action_type"`
+	Value      string `json:"value"`
+}
+
 type metaAction struct {
 	ActionType string
 	Value      string
 }
 
-func toMetaActions(in []struct {
-	ActionType string `json:"action_type"`
-	Value      string `json:"value"`
-}) []metaAction {
+type metaKPI struct {
+	Tipo  string
+	Valor int64
+}
+
+func metaActionsFromRaw(in []metaActionRaw) []metaAction {
 	out := make([]metaAction, 0, len(in))
 	for _, a := range in {
 		out = append(out, metaAction{ActionType: a.ActionType, Value: a.Value})
@@ -576,35 +585,85 @@ func toMetaActions(in []struct {
 	return out
 }
 
-func metaResultado(plataforma, tipoCliente, clicks string, actions []metaAction) (tipo string, valor int64) {
-	// Convención del reporte de la empresa:
-	// Facebook Residencial → Mensajes; Instagram → Interacciones; resto → Clics.
-	if plataforma == PlataformaFacebook && tipoCliente == TipoClienteResidencial {
-		for _, a := range actions {
-			switch a.ActionType {
-			case "onsite_conversion.messaging_conversation_started_7d",
-				"onsite_conversion.total_messaging_connection",
-				"onsite_conversion.messaging_first_reply":
-				n, _ := strconv.ParseInt(a.Value, 10, 64)
-				valor += n
-			}
+// metaKPIs: Facebook → Leads, Mensajes, Alcance, ThruPlays; Instagram → Interacciones; resto → Clics.
+// La inversión de la campaña se atribuye a cada KPI emitido (no sumar inversión entre tipos).
+func metaKPIs(plataforma, clicks, reach string, actions, thruplay []metaAction) []metaKPI {
+	if plataforma == PlataformaFacebook {
+		var out []metaKPI
+		if n := metaActionMax(actions, "lead", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead", "leadgen_grouped"); n > 0 {
+			out = append(out, metaKPI{TipoResultadoLeads, n})
 		}
-		return TipoResultadoMensajes, valor
+		if n := metaActionSum(actions, "onsite_conversion.messaging_conversation_started_7d"); n > 0 {
+			out = append(out, metaKPI{TipoResultadoMensajes, n})
+		}
+		if n := parseMetaInt(reach); n > 0 {
+			out = append(out, metaKPI{TipoResultadoAlcance, n})
+		}
+		nThru := metaActionSum(thruplay, "video_view")
+		if nThru == 0 {
+			nThru = metaActionSum(thruplay)
+		}
+		if nThru > 0 {
+			out = append(out, metaKPI{TipoResultadoThruPlays, nThru})
+		}
+		return out
 	}
 	if plataforma == PlataformaInstagram {
-		for _, a := range actions {
-			if a.ActionType == "post_engagement" || a.ActionType == "post_interaction_gross" {
-				n, _ := strconv.ParseInt(a.Value, 10, 64)
-				valor += n
-			}
+		valor := metaActionSum(actions, "post_engagement", "post_interaction_gross")
+		if valor == 0 {
+			valor = parseMetaInt(clicks)
 		}
 		if valor == 0 {
-			valor, _ = strconv.ParseInt(clicks, 10, 64)
+			return nil
 		}
-		return TipoResultadoInteracciones, valor
+		return []metaKPI{{TipoResultadoInteracciones, valor}}
 	}
-	valor, _ = strconv.ParseInt(clicks, 10, 64)
-	return TipoResultadoClics, valor
+	if n := parseMetaInt(clicks); n > 0 {
+		return []metaKPI{{TipoResultadoClics, n}}
+	}
+	return nil
+}
+
+func metaActionSum(actions []metaAction, types ...string) int64 {
+	var sum int64
+	if len(types) == 0 {
+		for _, a := range actions {
+			sum += parseMetaInt(a.Value)
+		}
+		return sum
+	}
+	want := map[string]struct{}{}
+	for _, t := range types {
+		want[t] = struct{}{}
+	}
+	for _, a := range actions {
+		if _, ok := want[a.ActionType]; ok {
+			sum += parseMetaInt(a.Value)
+		}
+	}
+	return sum
+}
+
+func metaActionMax(actions []metaAction, types ...string) int64 {
+	want := map[string]struct{}{}
+	for _, t := range types {
+		want[t] = struct{}{}
+	}
+	var max int64
+	for _, a := range actions {
+		if _, ok := want[a.ActionType]; !ok {
+			continue
+		}
+		if n := parseMetaInt(a.Value); n > max {
+			max = n
+		}
+	}
+	return max
+}
+
+func parseMetaInt(s string) int64 {
+	n, _ := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	return n
 }
 
 func (c *MetaClient) getAbsolute(fullURL string, out any) error {

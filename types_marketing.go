@@ -20,7 +20,7 @@ type MetricaAnuncio struct {
 	Plataforma    string    `json:"plataforma"`
 	TipoCliente   string    `json:"tipo_cliente"` // Residencial | Comercial
 	Mes           time.Time `json:"mes"`
-	TipoResultado string    `json:"tipo_resultado"` // Clics | Mensajes | Interacciones
+	TipoResultado string    `json:"tipo_resultado"` // Clics | Mensajes | Interacciones | Leads | Alcance | ThruPlays
 	Resultado     int64     `json:"resultado"`
 	Inversion     float64   `json:"inversion"`
 }
@@ -34,9 +34,12 @@ const (
 	TipoClienteResidencial = "Residencial"
 	TipoClienteComercial   = "Comercial"
 
-	TipoResultadoClics          = "Clics"
-	TipoResultadoMensajes       = "Mensajes"
-	TipoResultadoInteracciones  = "Interacciones"
+	TipoResultadoClics         = "Clics"
+	TipoResultadoMensajes      = "Mensajes"
+	TipoResultadoInteracciones = "Interacciones"
+	TipoResultadoLeads         = "Leads"
+	TipoResultadoAlcance       = "Alcance"
+	TipoResultadoThruPlays     = "ThruPlays"
 )
 
 func primerDiaMes(t time.Time, loc *time.Location) time.Time {

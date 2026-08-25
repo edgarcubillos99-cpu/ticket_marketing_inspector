@@ -224,10 +224,13 @@ ANUNCIOS (tabla anuncios_metricas):
   Mes                 → primer día del mes
   Tipo de Resultado   →
       Google / LinkedIn     → Clics
-      Facebook Residencial  → Mensajes (messaging conversations)
+      Facebook              → una fila por KPI con valor > 0:
+                              Leads | Mensajes | Alcance | ThruPlays
       Instagram             → Interacciones (post engagement)
   Resultado (#)       → cantidad del KPI anterior
-  Inversión           → spend / cost del periodo (moneda de la cuenta)
+  Inversión           → spend de la(s) campaña(s) atribuidas a ese KPI
+                        (en Facebook la misma inversión puede repetirse en
+                         varios tipo_resultado; no sumar entre tipos)
 
 
 --------------------------------------------------------------------------------

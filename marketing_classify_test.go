@@ -4,8 +4,8 @@ import "testing"
 
 func TestClasificarTipoCliente(t *testing.T) {
 	c := newClasificadorCliente(
-		`(?i)residenc|residential|\bres\b`,
-		`(?i)comercial|commercial|business|\bcom\b|\bb2b\b`,
+		`(?i)residenc|residential|\bres\b|hogar|instalaci|router|back\s*to\s*school|bts|b[uú]squeda|clientes potenciales|leads|acp|promo|v[ií]deo|display|anuncio`,
+		`(?i)comercial|commercial|business|\bb2b\b|small\s*business`,
 	)
 
 	cases := []struct {
@@ -14,9 +14,13 @@ func TestClasificarTipoCliente(t *testing.T) {
 	}{
 		{"Google Residencial Search", TipoClienteResidencial},
 		{"FB Res - Mensajes", TipoClienteResidencial},
+		{"Busqueda Hogar Osnet 2026", TipoClienteResidencial},
+		{"Display Residencial Osnet 2024 agosto", TipoClienteResidencial},
+		{"Back To School-Display agosto-2026#2 #2", TipoClienteResidencial},
+		{"Tráfico Small Business Osnet 2023", TipoClienteComercial},
 		{"Google Comercial Brand", TipoClienteComercial},
 		{"LinkedIn B2B Leads", TipoClienteComercial},
-		{"Campaña genérica", ""},
+		{"Campaña genérica sin pistas", ""},
 	}
 
 	for _, tc := range cases {

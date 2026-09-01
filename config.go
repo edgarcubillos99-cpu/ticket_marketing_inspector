@@ -115,10 +115,10 @@ func LoadConfig() (*Config, error) {
 		GoogleAdsRefreshToken:    strings.TrimSpace(os.Getenv("GOOGLE_ADS_REFRESH_TOKEN")),
 		GoogleAdsCustomerID:      strings.ReplaceAll(strings.TrimSpace(os.Getenv("GOOGLE_ADS_CUSTOMER_ID")), "-", ""),
 		GoogleAdsLoginCustomerID: strings.ReplaceAll(strings.TrimSpace(os.Getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID")), "-", ""),
-		GoogleAdsAPIVersion:      envOr("GOOGLE_ADS_API_VERSION", "v18"),
+		GoogleAdsAPIVersion:      envOr("GOOGLE_ADS_API_VERSION", "v25"),
 
-		AdsResidencialPattern: envOr("ADS_RESIDENCIAL_PATTERN", `(?i)residenc|residential|\bres\b`),
-		AdsComercialPattern:   envOr("ADS_COMERCIAL_PATTERN", `(?i)comercial|commercial|business|\bcom\b|\bb2b\b`),
+		AdsResidencialPattern: envOr("ADS_RESIDENCIAL_PATTERN", `(?i)residenc|residential|\bres\b|hogar|instalaci|router|back\s*to\s*school|bts|b[uú]squeda|clientes potenciales|leads|acp|promo|v[ií]deo|display|anuncio`),
+		AdsComercialPattern:   envOr("ADS_COMERCIAL_PATTERN", `(?i)comercial|commercial|business|\bb2b\b|small\s*business`),
 	}
 
 	if cfg.Workers < 1 {

@@ -15,7 +15,13 @@ func main() {
 	once := flag.Bool("once", false, "Ejecuta el flujo una sola vez y termina")
 	backfill := flag.Bool("backfill", false, "Recorre mes a mes desde BACKFILL_FROM (2024-01-01) hasta hoy y termina")
 	marketingOnly := flag.Bool("marketing-only", false, "Ejecuta solo sincronización de redes/ads y termina")
+	probeGAds := flag.Bool("probe-google-ads", false, "Prueba credenciales Google Ads + clasificación Residencial/Comercial y termina")
 	flag.Parse()
+
+	if *probeGAds {
+		runProbeGoogleAds()
+		return
+	}
 
 	cfg, err := LoadConfig()
 	if err != nil {

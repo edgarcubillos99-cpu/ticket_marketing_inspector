@@ -22,17 +22,18 @@ func newClasificadorCliente(resPattern, comPattern string) *clasificadorCliente 
 }
 
 // ClasificarTipoCliente infiere Residencial/Comercial del nombre de campaña.
+// Comercial se evalúa primero (marcadores más específicos: business, b2b, etc.).
 // Si no hay match, retorna "" (la fila se omite o se trata aparte).
 func (c *clasificadorCliente) ClasificarTipoCliente(nombre string) string {
 	nombre = strings.TrimSpace(nombre)
 	if nombre == "" {
 		return ""
 	}
-	if c.residencial != nil && c.residencial.MatchString(nombre) {
-		return TipoClienteResidencial
-	}
 	if c.comercial != nil && c.comercial.MatchString(nombre) {
 		return TipoClienteComercial
+	}
+	if c.residencial != nil && c.residencial.MatchString(nombre) {
+		return TipoClienteResidencial
 	}
 	return ""
 }

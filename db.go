@@ -17,6 +17,8 @@ type Store struct {
 	table       string
 	socialTable string
 	adsTable    string
+	gmbTable    string
+	emailsTable string
 }
 
 func NewStore(cfg *Config) (*Store, error) {
@@ -52,12 +54,20 @@ func NewStore(cfg *Config) (*Store, error) {
 		table:       sanitizeTableName(cfg.MySQLTable),
 		socialTable: sanitizeTableName(cfg.MySQLTableSocial),
 		adsTable:    sanitizeTableName(cfg.MySQLTableAds),
+		gmbTable:    sanitizeTableName(cfg.MySQLTableMyBusiness),
+		emailsTable: sanitizeTableName(cfg.MySQLTableEmails),
 	}
 	if store.socialTable == "tickets_osnet" {
 		store.socialTable = "redes_sociales_metricas"
 	}
 	if store.adsTable == "tickets_osnet" {
 		store.adsTable = "anuncios_metricas"
+	}
+	if store.gmbTable == "tickets_osnet" {
+		store.gmbTable = "mybusiness_metricas"
+	}
+	if store.emailsTable == "tickets_osnet" {
+		store.emailsTable = "emails_metricas"
 	}
 
 	if err := store.ensureTable(); err != nil {
@@ -69,6 +79,14 @@ func NewStore(cfg *Config) (*Store, error) {
 		return nil, err
 	}
 	if err := store.ensureAdsTable(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := store.ensureGMBTable(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := store.ensureEmailsTable(); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -172,6 +190,70 @@ CREATE TABLE %s (
 		return fmt.Errorf("crear tabla %s: %w", s.adsTable, err)
 	}
 	log.Printf("MySQL: tabla %s creada", s.adsTable)
+	return nil
+}
+
+func (s *Store) ensureGMBTable() error {
+	exists, err := s.tableExists(s.gmbTable)
+	if err != nil {
+		return err
+	}
+	if exists {
+		log.Printf("MySQL: tabla %s encontrada", s.gmbTable)
+		return nil
+	}
+
+	log.Printf("MySQL: tabla %s no existe, creándola...", s.gmbTable)
+	q := fmt.Sprintf(`
+CREATE TABLE %s (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  sede VARCHAR(100) NOT NULL,
+  mes DATE NOT NULL,
+  vistas BIGINT NOT NULL DEFAULT 0,
+  mensajes BIGINT NOT NULL DEFAULT 0,
+  llamadas BIGINT NOT NULL DEFAULT 0,
+  como_llegar BIGINT NOT NULL DEFAULT 0,
+  ir_al_sitio_web BIGINT NOT NULL DEFAULT 0,
+  interacciones_totales BIGINT NOT NULL DEFAULT 0,
+  actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_gmb_sede_mes (sede, mes)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, s.gmbTable)
+
+	if _, err := s.db.Exec(q); err != nil {
+		return fmt.Errorf("crear tabla %s: %w", s.gmbTable, err)
+	}
+	log.Printf("MySQL: tabla %s creada", s.gmbTable)
+	return nil
+}
+
+func (s *Store) ensureEmailsTable() error {
+	exists, err := s.tableExists(s.emailsTable)
+	if err != nil {
+		return err
+	}
+	if exists {
+		log.Printf("MySQL: tabla %s encontrada", s.emailsTable)
+		return nil
+	}
+
+	log.Printf("MySQL: tabla %s no existe, creándola...", s.emailsTable)
+	q := fmt.Sprintf(`
+CREATE TABLE %s (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  tipo VARCHAR(100) NOT NULL,
+  tipo_cliente VARCHAR(50) NOT NULL,
+  mes DATE NOT NULL,
+  cantidad BIGINT NOT NULL DEFAULT 0,
+  actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_emails_tipo_cliente_mes (tipo, tipo_cliente, mes)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, s.emailsTable)
+
+	if _, err := s.db.Exec(q); err != nil {
+		return fmt.Errorf("crear tabla %s: %w", s.emailsTable, err)
+	}
+	log.Printf("MySQL: tabla %s creada", s.emailsTable)
 	return nil
 }
 
@@ -300,6 +382,65 @@ ON DUPLICATE KEY UPDATE
 	)
 	if err != nil {
 		return fmt.Errorf("upsert ads %s %s %s: %w", m.Plataforma, m.TipoCliente, mes, err)
+	}
+	return nil
+}
+
+func (s *Store) UpsertMetricaMyBusiness(m MetricaMyBusiness) error {
+	if strings.TrimSpace(m.Sede) == "" || m.Mes.IsZero() {
+		return fmt.Errorf("metrica mybusiness incompleta: sede/mes requeridos")
+	}
+	mes := m.Mes.Format("2006-01-02")
+
+	q := fmt.Sprintf(`
+INSERT INTO %s (
+  sede, mes, vistas, mensajes, llamadas, como_llegar, ir_al_sitio_web, interacciones_totales
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+  vistas = VALUES(vistas),
+  mensajes = VALUES(mensajes),
+  llamadas = VALUES(llamadas),
+  como_llegar = VALUES(como_llegar),
+  ir_al_sitio_web = VALUES(ir_al_sitio_web),
+  interacciones_totales = VALUES(interacciones_totales)`, s.gmbTable)
+
+	_, err := s.db.Exec(q,
+		recortarRunes(m.Sede, 100),
+		mes,
+		m.Vistas,
+		m.Mensajes,
+		m.Llamadas,
+		m.ComoLlegar,
+		m.IrAlSitioWeb,
+		m.InteraccionesTotales,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert mybusiness %s %s: %w", m.Sede, mes, err)
+	}
+	return nil
+}
+
+func (s *Store) UpsertMetricaEmail(m MetricaEmail) error {
+	if strings.TrimSpace(m.Tipo) == "" || strings.TrimSpace(m.TipoCliente) == "" || m.Mes.IsZero() {
+		return fmt.Errorf("metrica email incompleta: tipo/tipo_cliente/mes requeridos")
+	}
+	mes := m.Mes.Format("2006-01-02")
+
+	q := fmt.Sprintf(`
+INSERT INTO %s (
+  tipo, tipo_cliente, mes, cantidad
+) VALUES (?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+  cantidad = VALUES(cantidad)`, s.emailsTable)
+
+	_, err := s.db.Exec(q,
+		recortarRunes(m.Tipo, 100),
+		recortarRunes(m.TipoCliente, 50),
+		mes,
+		m.Cantidad,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert email %s %s %s: %w", m.Tipo, m.TipoCliente, mes, err)
 	}
 	return nil
 }

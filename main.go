@@ -16,10 +16,25 @@ func main() {
 	backfill := flag.Bool("backfill", false, "Recorre mes a mes desde BACKFILL_FROM (2024-01-01) hasta hoy y termina")
 	marketingOnly := flag.Bool("marketing-only", false, "Ejecuta solo sincronización de redes/ads y termina")
 	probeGAds := flag.Bool("probe-google-ads", false, "Prueba credenciales Google Ads + clasificación Residencial/Comercial y termina")
+	probeGMB := flag.Bool("probe-gmb", false, "Prueba OAuth + listado de sedes Google Business Profile y termina")
+	probeEmails := flag.Bool("probe-emails", false, "Prueba Gravity Forms (lista formularios y cuenta un mes) y termina")
+	googleOAuth := flag.Bool("google-oauth", false, "Abre el flujo OAuth de Google (Ads + Business Profile) y muestra el refresh token")
 	flag.Parse()
 
+	if *googleOAuth {
+		runGoogleOAuth()
+		return
+	}
 	if *probeGAds {
 		runProbeGoogleAds()
+		return
+	}
+	if *probeGMB {
+		runProbeGMB()
+		return
+	}
+	if *probeEmails {
+		runProbeEmails()
 		return
 	}
 
@@ -47,7 +62,7 @@ func main() {
 	}
 
 	if *marketingOnly {
-		log.Println("Ejecutando solo marketing (redes/ads)...")
+		log.Println("Ejecutando solo marketing (redes/ads/gmb/emails)...")
 		if err := ejecutarFlujoMarketing(cfg, store); err != nil {
 			log.Fatalf("marketing: %v", err)
 		}
@@ -92,9 +107,9 @@ func main() {
 			cfg.CronSpec, cfg.CronTZ, entries[0].Next.Format(time.RFC3339))
 	}
 	if cfg.MarketingEnabled() {
-		log.Println("Marketing (redes/ads): habilitado en el mismo cron semanal")
+		log.Println("Marketing (redes/ads/gmb/emails): habilitado en el mismo cron semanal")
 	} else {
-		log.Println("Marketing (redes/ads): deshabilitado hasta completar variables en .env")
+		log.Println("Marketing (redes/ads/gmb/emails): deshabilitado hasta completar variables en .env")
 	}
 
 	select {}

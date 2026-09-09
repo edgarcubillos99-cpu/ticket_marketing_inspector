@@ -25,6 +25,26 @@ type MetricaAnuncio struct {
 	Inversion     float64   `json:"inversion"`
 }
 
+// MetricaMyBusiness replica el reporte de Google Business Profile por sede y mes.
+type MetricaMyBusiness struct {
+	Sede                 string    `json:"sede"`
+	Mes                  time.Time `json:"mes"`
+	Vistas               int64     `json:"vistas"`
+	Mensajes             int64     `json:"mensajes"`
+	Llamadas             int64     `json:"llamadas"`
+	ComoLlegar           int64     `json:"como_llegar"`
+	IrAlSitioWeb         int64     `json:"ir_al_sitio_web"`
+	InteraccionesTotales int64     `json:"interacciones_totales"`
+}
+
+// MetricaEmail replica el recuento mensual de formularios/emails del plugin web.
+type MetricaEmail struct {
+	Tipo        string    `json:"tipo"`
+	TipoCliente string    `json:"tipo_cliente"`
+	Mes         time.Time `json:"mes"`
+	Cantidad    int64     `json:"cantidad"`
+}
+
 const (
 	PlataformaFacebook  = "Facebook"
 	PlataformaInstagram = "Instagram"
@@ -40,6 +60,13 @@ const (
 	TipoResultadoLeads         = "Leads"
 	TipoResultadoAlcance       = "Alcance"
 	TipoResultadoThruPlays     = "ThruPlays"
+
+	TipoEmailCobertura             = "Cobertura"
+	TipoEmailInternetResidencial   = "Internet Residencial"
+	TipoEmailTelefoniaResidencial  = "Telefonía Residencial"
+	TipoEmailInternetComercial     = "Internet Comercial"
+	TipoEmailTelefoniaComercial    = "Telefonía Comercial"
+	TipoEmailOtros                 = "Otros"
 )
 
 func primerDiaMes(t time.Time, loc *time.Location) time.Time {

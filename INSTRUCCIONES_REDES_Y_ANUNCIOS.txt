@@ -15,9 +15,19 @@ Cada domingo (CRON_SPEC) el agente:
 Tablas nuevas (se crean solas al arrancar si no existen):
   - redes_sociales_metricas
   - anuncios_metricas
+  - mybusiness_metricas
+  - emails_metricas
 
 Prueba manual solo de marketing:
   go run . -marketing-only
+
+Reautorizar Google (Ads + Business Profile en un solo refresh token):
+  go run . -google-oauth
+
+Pruebas puntuales:
+  go run . -probe-google-ads
+  go run . -probe-gmb
+  go run . -probe-emails
 
 Backfill histórico (tickets + marketing desde BACKFILL_FROM):
   BACKFILL=true BACKFILL_FROM=2023-01-01 go run . -backfill
@@ -34,6 +44,9 @@ A) QUÉ INFORMACIÓN NECESITAS (checklist)
 [ ] Acceso a LinkedIn Campaign Manager (cuenta de anuncios)
 [ ] Acceso a Google Ads (cuenta de la empresa o MCC)
 [ ] Una cuenta de Google Cloud para OAuth (cliente OAuth 2.0)
+[ ] Redirect URI http://127.0.0.1:8765/callback en ese cliente OAuth
+[ ] Owner/manager de TODOS los perfiles Google Business Profile (oficinas)
+[ ] Solicitud de acceso a GBP APIs (formulario Google + Project Number)
 [ ] Convención de nombres de campañas Residencial vs Comercial
     (o ajustar ADS_RESIDENCIAL_PATTERN / ADS_COMERCIAL_PATTERN)
 
@@ -184,6 +197,84 @@ Variables .env:
 
 
 --------------------------------------------------------------------------------
+D2) GOOGLE BUSINESS PROFILE (My Business / oficinas)
+--------------------------------------------------------------------------------
+
+Esto NO usa el Developer Token de Google Ads. Sí puede reutilizar el mismo
+cliente OAuth (CLIENT_ID / SECRET), pero el refresh token actual de Ads NO
+sirve hasta reautorizar con el scope extra.
+
+Scope nuevo:
+  https://www.googleapis.com/auth/business.manage
+
+APIs a habilitar en el mismo proyecto Cloud:
+  - Google Ads API (ya debería estar)
+  - My Business Account Management API
+  - My Business Business Information API
+  - Business Profile Performance API
+
+Acceso a las GBP APIs (obligatorio, Google lo aprueba a mano):
+  1. El perfil de negocio debe estar verificado y activo ≥ 60 días
+  2. El correo que solicita debe ser owner/manager del GBP
+  3. Formulario: https://developers.google.com/my-business/content/prereqs
+     → "Application for Basic API Access" + Project Number de Cloud Console
+  4. Tras la aprobación, habilita las tres APIs de Business Profile
+
+En el cliente OAuth (Credentials):
+  - Authorized redirect URIs debe incluir EXACTO:
+    http://127.0.0.1:8765/callback
+  - Tipo Desktop o Web; el comando local usa ese callback
+
+Generar un refresh token con Ads + GBP juntos:
+  go run . -google-oauth
+
+Pega en .env:
+  GOOGLE_ADS_REFRESH_TOKEN=...   (reemplaza el viejo)
+  GMB_REFRESH_TOKEN=...          (el mismo valor)
+  # GMB_LOCATION_MAP=Humacao:locations/111;Yauco:locations/222
+
+Quién debe iniciar sesión en el navegador:
+  una cuenta Google que sea manager de TODAS las oficinas (Humacao, Yauco, etc.)
+  Y que ya tenga acceso a Google Ads.
+
+Probar:
+  go run . -probe-gmb
+
+Métricas → columnas Excel:
+  Vistas               = impresiones Search+Maps desktop+móvil
+  Mensajes             = BUSINESS_CONVERSATIONS
+  Llamadas             = CALL_CLICKS
+  Cómo llegar          = BUSINESS_DIRECTION_REQUESTS
+  Ir al sitio web      = WEBSITE_CLICKS
+  Interacciones totales = mensajes + llamadas + cómo llegar + web
+
+Si los títulos de GBP no coinciden con el Excel, usa GMB_LOCATION_MAP
+con los location IDs que imprime el probe.
+
+
+--------------------------------------------------------------------------------
+D3) EMAILS (plugin WordPress)
+--------------------------------------------------------------------------------
+
+Tabla emails_metricas lista para el cron. El fetch real está implementado
+para Gravity Forms (REST API v2).
+
+Si el plugin de tu jefe NO es Gravity Forms, deja EMAILS_PROVIDER vacío
+(el cron omite emails) y pásame el nombre del plugin.
+
+Para Gravity Forms:
+  1. WP Admin → Users → Profile → Application Passwords
+  2. Forms → Settings → REST API → Enable
+  3. EMAILS_PROVIDER=gravityforms
+  4. EMAILS_FORM_MAP=ID:Tipo:TipoCliente;...
+     Ejemplo:
+     1:Cobertura:Residencial;2:Internet Residencial:Residencial;3:Telefonía Residencial:Residencial;4:Internet Comercial:Comercial;5:Telefonía Comercial:Comercial;6:Otros:Residencial
+  5. go run . -probe-emails  (lista formularios y cuentas un mes)
+
+Usuario WP: solo lectura / capacidad gravityforms_view_entries.
+
+
+--------------------------------------------------------------------------------
 E) CLASIFICACIÓN Residencial / Comercial (crítico para anuncios)
 --------------------------------------------------------------------------------
 
@@ -243,10 +334,12 @@ G) ORDEN RECOMENDADO PARA ACTIVAR
 1. Completar Meta (orgánico FB+IG) → probar: go run . -marketing-only
 2. Completar Meta Ads (META_AD_ACCOUNT_ID)
 3. Completar Google Ads
-4. Completar LinkedIn orgánico
-5. Completar LinkedIn Ads (puede tardar por App Review)
-6. Ajustar regex de campañas según nombres reales
-7. (Opcional) BACKFILL_FROM=2023-01-01 para histórico
+4. Reautorizar OAuth (go run . -google-oauth) y completar GMB_REFRESH_TOKEN
+5. Completar LinkedIn orgánico
+6. Completar LinkedIn Ads (puede tardar por App Review)
+7. Emails: identificar plugin; si es Gravity Forms, completar EMAILS_*
+8. Ajustar regex de campañas según nombres reales
+9. (Opcional) BACKFILL_FROM=2023-01-01 para histórico
 
 Si alguna plataforma falla, las demás siguen; el error queda en el log.
 Sin credenciales de marketing, Ubersmith continúa igual que antes.
@@ -261,6 +354,8 @@ Meta Business / Ads:             ____________________
 LinkedIn Company admin:          ____________________
 LinkedIn Campaign Manager:       ____________________
 Google Ads / MCC:                ____________________
+Google Business Profile (oficinas): ____________________
+WordPress / plugin emails:       ____________________
 Quién creará las Developer Apps: ____________________
 
 ================================================================================

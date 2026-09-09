@@ -26,9 +26,11 @@ type Config struct {
 	MySQLTable    string
 	MySQLTLS      string
 
-	// Tablas de marketing (redes + anuncios)
-	MySQLTableSocial string
-	MySQLTableAds    string
+	// Tablas de marketing (redes + anuncios + GBP + emails)
+	MySQLTableSocial     string
+	MySQLTableAds        string
+	MySQLTableMyBusiness string
+	MySQLTableEmails     string
 
 	Port       string
 	Workers    int
@@ -67,6 +69,20 @@ type Config struct {
 	// Clasificación Residencial / Comercial por nombre de campaña (regex case-insensitive)
 	AdsResidencialPattern string
 	AdsComercialPattern   string
+
+	// Google Business Profile (My Business)
+	GMBClientID     string
+	GMBClientSecret string
+	GMBRefreshToken string
+	GMBAccountID    string // opcional: accounts/123 o solo el número
+	GMBLocationMap  string // Humacao:locations/111;Yauco:locations/222
+
+	// Emails / formularios del plugin WordPress
+	EmailsProvider      string // gravityforms (vacío = omitir)
+	EmailsWPBaseURL     string
+	EmailsWPUser        string
+	EmailsWPAppPassword string
+	EmailsFormMap       string // 1:Cobertura:Residencial;2:Internet Residencial:Residencial
 }
 
 func LoadConfig() (*Config, error) {
@@ -86,8 +102,10 @@ func LoadConfig() (*Config, error) {
 		MySQLDatabase:    strings.TrimSpace(os.Getenv("MYSQL_DATABASE")),
 		MySQLTable:       envOr("MYSQL_TABLE", "tickets_osnet"),
 		MySQLTLS:         strings.TrimSpace(os.Getenv("MYSQL_TLS")),
-		MySQLTableSocial: envOr("MYSQL_TABLE_SOCIAL", "redes_sociales_metricas"),
-		MySQLTableAds:    envOr("MYSQL_TABLE_ADS", "anuncios_metricas"),
+		MySQLTableSocial:     envOr("MYSQL_TABLE_SOCIAL", "redes_sociales_metricas"),
+		MySQLTableAds:        envOr("MYSQL_TABLE_ADS", "anuncios_metricas"),
+		MySQLTableMyBusiness: envOr("MYSQL_TABLE_MYBUSINESS", "mybusiness_metricas"),
+		MySQLTableEmails:     envOr("MYSQL_TABLE_EMAILS", "emails_metricas"),
 		Port:             envOr("PORT", "8080"),
 		Workers:          envInt("WORKERS", 3),
 		RunOnStart:       envBool("RUN_ON_START"),
@@ -119,6 +137,18 @@ func LoadConfig() (*Config, error) {
 
 		AdsResidencialPattern: envOr("ADS_RESIDENCIAL_PATTERN", `(?i)residenc|residential|\bres\b|hogar|instalaci|router|back\s*to\s*school|bts|b[uú]squeda|clientes potenciales|leads|acp|promo|v[ií]deo|display|anuncio`),
 		AdsComercialPattern:   envOr("ADS_COMERCIAL_PATTERN", `(?i)comercial|commercial|business|\bb2b\b|small\s*business`),
+
+		GMBClientID:     strings.TrimSpace(os.Getenv("GMB_CLIENT_ID")),
+		GMBClientSecret: strings.TrimSpace(os.Getenv("GMB_CLIENT_SECRET")),
+		GMBRefreshToken: strings.TrimSpace(os.Getenv("GMB_REFRESH_TOKEN")),
+		GMBAccountID:    strings.TrimSpace(os.Getenv("GMB_ACCOUNT_ID")),
+		GMBLocationMap:  strings.TrimSpace(os.Getenv("GMB_LOCATION_MAP")),
+
+		EmailsProvider:      strings.ToLower(strings.TrimSpace(os.Getenv("EMAILS_PROVIDER"))),
+		EmailsWPBaseURL:     strings.TrimRight(strings.TrimSpace(os.Getenv("EMAILS_WP_BASE_URL")), "/"),
+		EmailsWPUser:        strings.TrimSpace(os.Getenv("EMAILS_WP_USER")),
+		EmailsWPAppPassword: strings.TrimSpace(os.Getenv("EMAILS_WP_APP_PASSWORD")),
+		EmailsFormMap:       strings.TrimSpace(os.Getenv("EMAILS_FORM_MAP")),
 	}
 
 	if cfg.Workers < 1 {
@@ -178,10 +208,45 @@ func (c *Config) GoogleAdsEnabled() bool {
 		c.GoogleAdsCustomerID != ""
 }
 
+func (c *Config) gmbOAuthClientID() string {
+	if c.GMBClientID != "" {
+		return c.GMBClientID
+	}
+	return c.GoogleAdsClientID
+}
+
+func (c *Config) gmbOAuthClientSecret() string {
+	if c.GMBClientSecret != "" {
+		return c.GMBClientSecret
+	}
+	return c.GoogleAdsClientSecret
+}
+
+func (c *Config) gmbOAuthRefreshToken() string {
+	if c.GMBRefreshToken != "" {
+		return c.GMBRefreshToken
+	}
+	return c.GoogleAdsRefreshToken
+}
+
+func (c *Config) GMBEnabled() bool {
+	return c.gmbOAuthClientID() != "" &&
+		c.gmbOAuthClientSecret() != "" &&
+		c.GMBRefreshToken != ""
+}
+
+func (c *Config) EmailsEnabled() bool {
+	if c.EmailsProvider != "gravityforms" {
+		return false
+	}
+	return c.EmailsWPBaseURL != "" && c.EmailsWPUser != "" &&
+		c.EmailsWPAppPassword != "" && c.EmailsFormMap != ""
+}
+
 func (c *Config) MarketingEnabled() bool {
 	return c.MetaOrganicoEnabled() || c.MetaAdsEnabled() ||
 		c.LinkedInOrganicoEnabled() || c.LinkedInAdsEnabled() ||
-		c.GoogleAdsEnabled()
+		c.GoogleAdsEnabled() || c.GMBEnabled() || c.EmailsEnabled()
 }
 
 func envOr(key, fallback string) string {

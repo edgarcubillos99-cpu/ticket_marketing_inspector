@@ -117,8 +117,40 @@ func sincronizarMarketingRango(cfg *Config, store *Store, desde, hasta time.Time
 		}
 	}
 
-	log.Printf("Marketing completado. redes OK=%d err=%d | ads OK=%d err=%d",
-		socialOK, socialFail, adsOK, adsFail)
+	var gmbOK, gmbFail, emailsOK, emailsFail int
+	if cfg.GMBEnabled() {
+		gmb := NewGMBClient(cfg)
+		rows, err := gmb.Fetch(desde, hasta, loc)
+		if err != nil {
+			log.Printf("mybusiness: %v", err)
+			gmbFail++
+		} else {
+			ok, fail := guardarGMB(store, rows)
+			gmbOK += ok
+			gmbFail += fail
+		}
+	}
+
+	if cfg.EmailsEnabled() {
+		client, err := NewEmailsClient(cfg)
+		if err != nil {
+			log.Printf("emails config: %v", err)
+			emailsFail++
+		} else {
+			rows, err := client.Fetch(desde, hasta, loc)
+			if err != nil {
+				log.Printf("emails: %v", err)
+				emailsFail++
+			} else {
+				ok, fail := guardarEmails(store, rows)
+				emailsOK += ok
+				emailsFail += fail
+			}
+		}
+	}
+
+	log.Printf("Marketing completado. redes OK=%d err=%d | ads OK=%d err=%d | gmb OK=%d err=%d | emails OK=%d err=%d",
+		socialOK, socialFail, adsOK, adsFail, gmbOK, gmbFail, emailsOK, emailsFail)
 	return nil
 }
 
@@ -145,6 +177,34 @@ func guardarAds(store *Store, rows []MetricaAnuncio) (ok, fail int) {
 		}
 		log.Printf("ads guardado: %s %s %s %s=%d inversion=%.2f",
 			m.Plataforma, m.TipoCliente, m.Mes.Format("2006-01"), m.TipoResultado, m.Resultado, m.Inversion)
+		ok++
+	}
+	return ok, fail
+}
+
+func guardarGMB(store *Store, rows []MetricaMyBusiness) (ok, fail int) {
+	for _, m := range rows {
+		if err := store.UpsertMetricaMyBusiness(m); err != nil {
+			log.Printf("guardar gmb %s %s: %v", m.Sede, m.Mes.Format("2006-01"), err)
+			fail++
+			continue
+		}
+		log.Printf("gmb guardado: %s %s vistas=%d llamadas=%d web=%d interacciones=%d",
+			m.Sede, m.Mes.Format("2006-01"), m.Vistas, m.Llamadas, m.IrAlSitioWeb, m.InteraccionesTotales)
+		ok++
+	}
+	return ok, fail
+}
+
+func guardarEmails(store *Store, rows []MetricaEmail) (ok, fail int) {
+	for _, m := range rows {
+		if err := store.UpsertMetricaEmail(m); err != nil {
+			log.Printf("guardar email %s %s %s: %v", m.Tipo, m.TipoCliente, m.Mes.Format("2006-01"), err)
+			fail++
+			continue
+		}
+		log.Printf("email guardado: %s %s %s cantidad=%d",
+			m.Tipo, m.TipoCliente, m.Mes.Format("2006-01"), m.Cantidad)
 		ok++
 	}
 	return ok, fail

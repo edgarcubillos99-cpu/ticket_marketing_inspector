@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -50,43 +49,12 @@ func (c *GoogleAdsClient) ensureToken() (string, error) {
 		return c.accessToken, nil
 	}
 
-	form := url.Values{}
-	form.Set("client_id", c.clientID)
-	form.Set("client_secret", c.clientSecret)
-	form.Set("refresh_token", c.refreshToken)
-	form.Set("grant_type", "refresh_token")
-
-	resp, err := c.http.PostForm("https://oauth2.googleapis.com/token", form)
-	if err != nil {
-		return "", fmt.Errorf("google oauth: %w", err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	tok, exp, err := googleRefreshAccessToken(c.http, c.clientID, c.clientSecret, c.refreshToken)
 	if err != nil {
 		return "", err
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("google oauth HTTP %d: %s", resp.StatusCode, recortar(string(body), 300))
-	}
-
-	var tok struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-		TokenType   string `json:"token_type"`
-		Error       string `json:"error"`
-		ErrorDesc   string `json:"error_description"`
-	}
-	if err := json.Unmarshal(body, &tok); err != nil {
-		return "", err
-	}
-	if tok.AccessToken == "" {
-		return "", fmt.Errorf("google oauth: %s %s", tok.Error, tok.ErrorDesc)
-	}
-	c.accessToken = tok.AccessToken
-	if tok.ExpiresIn <= 0 {
-		tok.ExpiresIn = 3600
-	}
-	c.tokenExpiry = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+	c.accessToken = tok
+	c.tokenExpiry = exp
 	return c.accessToken, nil
 }
 

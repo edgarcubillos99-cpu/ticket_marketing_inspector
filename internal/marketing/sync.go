@@ -1,15 +1,18 @@
-package main
+package marketing
 
 import (
+	"agente_marketing/internal/config"
+	"agente_marketing/internal/domain"
+	"agente_marketing/internal/store"
 	"fmt"
 	"log"
 	"time"
 )
 
 // ejecutarFlujoMarketing sincroniza redes sociales orgánicas + anuncios en el mismo ciclo semanal.
-func ejecutarFlujoMarketing(cfg *Config, store *Store) error {
+func EjecutarFlujo(cfg *config.Config, store *store.Store) error {
 	if !cfg.MarketingEnabled() {
-		log.Println("Marketing (redes/ads): omitido — faltan credenciales en .env (ver INSTRUCCIONES_REDES_Y_ANUNCIOS.txt)")
+		log.Println("Marketing (redes/ads): omitido — faltan credenciales en .env (ver docs/INSTRUCCIONES_REDES_Y_ANUNCIOS.txt)")
 		return nil
 	}
 
@@ -18,7 +21,7 @@ func ejecutarFlujoMarketing(cfg *Config, store *Store) error {
 		return fmt.Errorf("zona horaria %s: %w", cfg.CronTZ, err)
 	}
 
-	hasta := primerDiaMes(time.Now().In(loc), loc)
+	hasta := domain.PrimerDiaMes(time.Now().In(loc), loc)
 	desde := hasta.AddDate(0, -(cfg.MarketingMonthsLookback - 1), 0)
 	log.Printf("Marketing: sincronizando %s → %s (%d meses)",
 		desde.Format("2006-01"), hasta.Format("2006-01"), cfg.MarketingMonthsLookback)
@@ -26,7 +29,7 @@ func ejecutarFlujoMarketing(cfg *Config, store *Store) error {
 	return sincronizarMarketingRango(cfg, store, desde, hasta, loc)
 }
 
-func ejecutarBackfillMarketing(cfg *Config, store *Store) error {
+func EjecutarBackfill(cfg *config.Config, store *store.Store) error {
 	if !cfg.MarketingEnabled() {
 		log.Println("Marketing backfill: omitido — faltan credenciales")
 		return nil
@@ -41,14 +44,14 @@ func ejecutarBackfillMarketing(cfg *Config, store *Store) error {
 	if err != nil {
 		return fmt.Errorf("BACKFILL_FROM %q: usa YYYY-MM-DD", cfg.BackfillFrom)
 	}
-	desde = primerDiaMes(desde, loc)
-	hasta := primerDiaMes(time.Now().In(loc), loc)
+	desde = domain.PrimerDiaMes(desde, loc)
+	hasta := domain.PrimerDiaMes(time.Now().In(loc), loc)
 
 	log.Printf("Marketing backfill: %s → %s", desde.Format("2006-01"), hasta.Format("2006-01"))
 	return sincronizarMarketingRango(cfg, store, desde, hasta, loc)
 }
 
-func sincronizarMarketingRango(cfg *Config, store *Store, desde, hasta time.Time, loc *time.Location) error {
+func sincronizarMarketingRango(cfg *config.Config, store *store.Store, desde, hasta time.Time, loc *time.Location) error {
 	var socialOK, socialFail, adsOK, adsFail int
 
 	if cfg.MetaOrganicoEnabled() || cfg.MetaAdsEnabled() {
@@ -154,7 +157,7 @@ func sincronizarMarketingRango(cfg *Config, store *Store, desde, hasta time.Time
 	return nil
 }
 
-func guardarSocial(store *Store, rows []MetricaRedSocial) (ok, fail int) {
+func guardarSocial(store *store.Store, rows []domain.MetricaRedSocial) (ok, fail int) {
 	for _, m := range rows {
 		if err := store.UpsertMetricaSocial(m); err != nil {
 			log.Printf("guardar social %s %s: %v", m.Plataforma, m.Mes.Format("2006-01"), err)
@@ -168,7 +171,7 @@ func guardarSocial(store *Store, rows []MetricaRedSocial) (ok, fail int) {
 	return ok, fail
 }
 
-func guardarAds(store *Store, rows []MetricaAnuncio) (ok, fail int) {
+func guardarAds(store *store.Store, rows []domain.MetricaAnuncio) (ok, fail int) {
 	for _, m := range rows {
 		if err := store.UpsertMetricaAnuncio(m); err != nil {
 			log.Printf("guardar ads %s %s %s: %v", m.Plataforma, m.TipoCliente, m.Mes.Format("2006-01"), err)
@@ -182,7 +185,7 @@ func guardarAds(store *Store, rows []MetricaAnuncio) (ok, fail int) {
 	return ok, fail
 }
 
-func guardarGMB(store *Store, rows []MetricaMyBusiness) (ok, fail int) {
+func guardarGMB(store *store.Store, rows []domain.MetricaMyBusiness) (ok, fail int) {
 	for _, m := range rows {
 		if err := store.UpsertMetricaMyBusiness(m); err != nil {
 			log.Printf("guardar gmb %s %s: %v", m.Sede, m.Mes.Format("2006-01"), err)
@@ -196,7 +199,7 @@ func guardarGMB(store *Store, rows []MetricaMyBusiness) (ok, fail int) {
 	return ok, fail
 }
 
-func guardarEmails(store *Store, rows []MetricaEmail) (ok, fail int) {
+func guardarEmails(store *store.Store, rows []domain.MetricaEmail) (ok, fail int) {
 	for _, m := range rows {
 		if err := store.UpsertMetricaEmail(m); err != nil {
 			log.Printf("guardar email %s %s %s: %v", m.Tipo, m.TipoCliente, m.Mes.Format("2006-01"), err)

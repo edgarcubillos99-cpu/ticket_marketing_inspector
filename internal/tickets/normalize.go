@@ -1,6 +1,7 @@
-package main
+package tickets
 
 import (
+	"agente_marketing/internal/domain"
 	"regexp"
 	"sort"
 	"strconv"
@@ -13,8 +14,8 @@ var (
 	reEspacios = regexp.MustCompile(`\s+`)
 )
 
-func filtrarTicketsValidos(tickets map[string]TicketItem) []TicketItem {
-	validos := make([]TicketItem, 0, len(tickets))
+func filtrarTicketsValidos(tickets map[string]domain.TicketItem) []domain.TicketItem {
+	validos := make([]domain.TicketItem, 0, len(tickets))
 	for _, ticket := range tickets {
 		subject := strings.ToLower(ticket.Subject.String())
 		contieneSolicitud := strings.Contains(subject, "solicitud nueva")
@@ -66,16 +67,16 @@ func limpiarNombreAgente(nombre string) string {
 }
 
 // normalizarTicket replica el nodo 7: une ticket_get + ticket_post_list.
-func normalizarTicket(meta *TicketItem, posts []TicketPost) TicketNormalizado {
+func normalizarTicket(meta *domain.TicketItem, posts []domain.TicketPost) domain.TicketNormalizado {
 	sort.Slice(posts, func(i, j int) bool {
 		ti, _ := strconv.ParseInt(posts[i].Timestamp.String(), 10, 64)
 		tj, _ := strconv.ParseInt(posts[j].Timestamp.String(), 10, 64)
 		return ti < tj
 	})
 
-	historial := make([]PostLimpio, 0, len(posts))
+	historial := make([]domain.PostLimpio, 0, len(posts))
 	for _, post := range posts {
-		historial = append(historial, PostLimpio{
+		historial = append(historial, domain.PostLimpio{
 			Autor:     post.Author.String(),
 			TicketID:  post.TicketID.String(),
 			Timestamp: post.Timestamp.String(),
@@ -97,7 +98,7 @@ func normalizarTicket(meta *TicketItem, posts []TicketPost) TicketNormalizado {
 		motivo = meta.Metadata.ResolutionType.String()
 	}
 
-	return TicketNormalizado{
+	return domain.TicketNormalizado{
 		TicketID:        meta.TicketID.String(),
 		TipoCliente:     tipoCliente,
 		Subject:         meta.Subject.String(),

@@ -1,6 +1,8 @@
-package main
+package marketing
 
 import (
+	"agente_marketing/internal/config"
+	"agente_marketing/internal/domain"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,7 +23,7 @@ type MetaClient struct {
 	class    *clasificadorCliente
 }
 
-func NewMetaClient(cfg *Config) *MetaClient {
+func NewMetaClient(cfg *config.Config) *MetaClient {
 	return &MetaClient{
 		token:    cfg.MetaAccessToken,
 		version:  strings.TrimPrefix(cfg.MetaAPIVersion, "/"),
@@ -67,7 +69,7 @@ func (c *MetaClient) get(path string, params url.Values, out any) error {
 		return fmt.Errorf("meta leer respuesta: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("meta HTTP %d: %s", resp.StatusCode, recortar(string(body), 400))
+		return fmt.Errorf("meta HTTP %d: %s", resp.StatusCode, domain.Recortar(string(body), 400))
 	}
 
 	var apiErr struct {
@@ -86,16 +88,16 @@ func (c *MetaClient) get(path string, params url.Values, out any) error {
 		return nil
 	}
 	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("meta JSON: %w (%s)", err, recortar(string(body), 300))
+		return fmt.Errorf("meta JSON: %w (%s)", err, domain.Recortar(string(body), 300))
 	}
 	return nil
 }
 
 // FetchOrganico obtiene métricas mensuales de Facebook Page e Instagram Business.
-func (c *MetaClient) FetchOrganico(desde, hasta time.Time, loc *time.Location) ([]MetricaRedSocial, error) {
-	var out []MetricaRedSocial
+func (c *MetaClient) FetchOrganico(desde, hasta time.Time, loc *time.Location) ([]domain.MetricaRedSocial, error) {
+	var out []domain.MetricaRedSocial
 	var errs []string
-	meses := mesesEnRango(desde, hasta, loc)
+	meses := domain.MesesEnRango(desde, hasta, loc)
 
 	if c.pageID != "" {
 		for _, mes := range meses {
@@ -131,7 +133,7 @@ func (c *MetaClient) FetchOrganico(desde, hasta time.Time, loc *time.Location) (
 
 // rangoInsightsMes acota [inicio, fin) al mes y al instante actual (Meta rechaza since futuro).
 func rangoInsightsMes(mes time.Time, loc *time.Location) (inicio, fin time.Time, ok bool) {
-	inicio = primerDiaMes(mes, loc)
+	inicio = domain.PrimerDiaMes(mes, loc)
 	fin = inicio.AddDate(0, 1, 0)
 	now := time.Now().In(loc)
 	if !inicio.Before(now) {
@@ -143,17 +145,17 @@ func rangoInsightsMes(mes time.Time, loc *time.Location) (inicio, fin time.Time,
 	return inicio, fin, inicio.Before(fin)
 }
 
-func (c *MetaClient) facebookMes(mes time.Time, loc *time.Location) (MetricaRedSocial, error) {
+func (c *MetaClient) facebookMes(mes time.Time, loc *time.Location) (domain.MetricaRedSocial, error) {
 	inicio, fin, ok := rangoInsightsMes(mes, loc)
 	if !ok {
-		return MetricaRedSocial{}, fmt.Errorf("sin datos disponibles aún para el mes")
+		return domain.MetricaRedSocial{}, fmt.Errorf("sin datos disponibles aún para el mes")
 	}
 	since := strconv.FormatInt(inicio.Unix(), 10)
 	until := strconv.FormatInt(fin.Unix(), 10)
 
-	m := MetricaRedSocial{
-		Plataforma: PlataformaFacebook,
-		Mes:        primerDiaMes(mes, loc),
+	m := domain.MetricaRedSocial{
+		Plataforma: domain.PlataformaFacebook,
+		Mes:        domain.PrimerDiaMes(mes, loc),
 	}
 
 	// Alcance (viewers únicos) + follows al cierre del periodo.
@@ -270,15 +272,15 @@ func (c *MetaClient) agregarEngagementPostsFacebook(inicio, fin time.Time) (like
 // Instagram Insights rechaza ventanas > 30 días entre since y until.
 const maxIGInsightSpan = 30 * 24 * time.Hour
 
-func (c *MetaClient) instagramMes(mes time.Time, loc *time.Location) (MetricaRedSocial, error) {
+func (c *MetaClient) instagramMes(mes time.Time, loc *time.Location) (domain.MetricaRedSocial, error) {
 	inicio, fin, ok := rangoInsightsMes(mes, loc)
 	if !ok {
-		return MetricaRedSocial{}, fmt.Errorf("sin datos disponibles aún para el mes")
+		return domain.MetricaRedSocial{}, fmt.Errorf("sin datos disponibles aún para el mes")
 	}
 
-	m := MetricaRedSocial{
-		Plataforma: PlataformaInstagram,
-		Mes:        primerDiaMes(mes, loc),
+	m := domain.MetricaRedSocial{
+		Plataforma: domain.PlataformaInstagram,
+		Mes:        domain.PrimerDiaMes(mes, loc),
 	}
 
 	// Reach diario. follower_count (insights) = altas nuevas por día, NO el total.
@@ -446,13 +448,13 @@ func (c *MetaClient) igMediaShares(mediaID string) int64 {
 }
 
 // FetchAds obtiene insights mensuales de Meta Ads (Facebook + Instagram por publisher_platform).
-func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]MetricaAnuncio, error) {
+func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]domain.MetricaAnuncio, error) {
 	if c.adAcctID == "" {
 		return nil, nil
 	}
 
-	inicio := primerDiaMes(desde, loc)
-	finExcl := primerDiaMes(hasta, loc).AddDate(0, 1, 0)
+	inicio := domain.PrimerDiaMes(desde, loc)
+	finExcl := domain.PrimerDiaMes(hasta, loc).AddDate(0, 1, 0)
 
 	params := url.Values{}
 	// publisher_platform solo en breakdowns (no en fields).
@@ -475,7 +477,7 @@ func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]Met
 		VideoThruplayWatchedActions []metaActionRaw `json:"video_thruplay_watched_actions"`
 	}
 
-	agg := map[string]*MetricaAnuncio{}
+	agg := map[string]*domain.MetricaAnuncio{}
 
 	path := "/act_" + c.adAcctID + "/insights"
 	for path != "" {
@@ -501,7 +503,7 @@ func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]Met
 			if tipoCliente == "" {
 				// Campañas Meta de Osnet no usan "Residencial/Comercial" en el nombre;
 				// por defecto Residencial (LinkedIn defaulta Comercial).
-				tipoCliente = TipoClienteResidencial
+				tipoCliente = domain.TipoClienteResidencial
 			}
 			plataforma := mapPublisherPlatform(r.PublisherPlatform)
 			if plataforma == "" {
@@ -511,7 +513,7 @@ func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]Met
 			if err != nil {
 				continue
 			}
-			mes = primerDiaMes(mes, loc)
+			mes = domain.PrimerDiaMes(mes, loc)
 
 			spend, _ := strconv.ParseFloat(r.Spend, 64)
 			actions := metaActionsFromRaw(r.Actions)
@@ -523,7 +525,7 @@ func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]Met
 					cur.Resultado += kpi.Valor
 					cur.Inversion += spend
 				} else {
-					agg[key] = &MetricaAnuncio{
+					agg[key] = &domain.MetricaAnuncio{
 						Plataforma:    plataforma,
 						TipoCliente:   tipoCliente,
 						Mes:           mes,
@@ -542,7 +544,7 @@ func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]Met
 		}
 	}
 
-	out := make([]MetricaAnuncio, 0, len(agg))
+	out := make([]domain.MetricaAnuncio, 0, len(agg))
 	for _, v := range agg {
 		out = append(out, *v)
 	}
@@ -552,9 +554,9 @@ func (c *MetaClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]Met
 func mapPublisherPlatform(p string) string {
 	switch strings.ToLower(strings.TrimSpace(p)) {
 	case "facebook":
-		return PlataformaFacebook
+		return domain.PlataformaFacebook
 	case "instagram":
-		return PlataformaInstagram
+		return domain.PlataformaInstagram
 	case "audience_network", "messenger", "unknown", "":
 		return ""
 	default:
@@ -588,27 +590,27 @@ func metaActionsFromRaw(in []metaActionRaw) []metaAction {
 // metaKPIs: Facebook → Leads, Mensajes, Alcance, ThruPlays; Instagram → Interacciones; resto → Clics.
 // La inversión de la campaña se atribuye a cada KPI emitido (no sumar inversión entre tipos).
 func metaKPIs(plataforma, clicks, reach string, actions, thruplay []metaAction) []metaKPI {
-	if plataforma == PlataformaFacebook {
+	if plataforma == domain.PlataformaFacebook {
 		var out []metaKPI
 		if n := metaActionMax(actions, "lead", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead", "leadgen_grouped"); n > 0 {
-			out = append(out, metaKPI{TipoResultadoLeads, n})
+			out = append(out, metaKPI{domain.TipoResultadoLeads, n})
 		}
 		if n := metaActionSum(actions, "onsite_conversion.messaging_conversation_started_7d"); n > 0 {
-			out = append(out, metaKPI{TipoResultadoMensajes, n})
+			out = append(out, metaKPI{domain.TipoResultadoMensajes, n})
 		}
 		if n := parseMetaInt(reach); n > 0 {
-			out = append(out, metaKPI{TipoResultadoAlcance, n})
+			out = append(out, metaKPI{domain.TipoResultadoAlcance, n})
 		}
 		nThru := metaActionSum(thruplay, "video_view")
 		if nThru == 0 {
 			nThru = metaActionSum(thruplay)
 		}
 		if nThru > 0 {
-			out = append(out, metaKPI{TipoResultadoThruPlays, nThru})
+			out = append(out, metaKPI{domain.TipoResultadoThruPlays, nThru})
 		}
 		return out
 	}
-	if plataforma == PlataformaInstagram {
+	if plataforma == domain.PlataformaInstagram {
 		valor := metaActionSum(actions, "post_engagement", "post_interaction_gross")
 		if valor == 0 {
 			valor = parseMetaInt(clicks)
@@ -616,10 +618,10 @@ func metaKPIs(plataforma, clicks, reach string, actions, thruplay []metaAction) 
 		if valor == 0 {
 			return nil
 		}
-		return []metaKPI{{TipoResultadoInteracciones, valor}}
+		return []metaKPI{{domain.TipoResultadoInteracciones, valor}}
 	}
 	if n := parseMetaInt(clicks); n > 0 {
-		return []metaKPI{{TipoResultadoClics, n}}
+		return []metaKPI{{domain.TipoResultadoClics, n}}
 	}
 	return nil
 }
@@ -681,7 +683,7 @@ func (c *MetaClient) getAbsolute(fullURL string, out any) error {
 		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("meta HTTP %d: %s", resp.StatusCode, recortar(string(body), 400))
+		return fmt.Errorf("meta HTTP %d: %s", resp.StatusCode, domain.Recortar(string(body), 400))
 	}
 	return json.Unmarshal(body, out)
 }

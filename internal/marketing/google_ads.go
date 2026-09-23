@@ -1,6 +1,8 @@
-package main
+package marketing
 
 import (
+	"agente_marketing/internal/config"
+	"agente_marketing/internal/domain"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -27,7 +29,7 @@ type GoogleAdsClient struct {
 	tokenExpiry time.Time
 }
 
-func NewGoogleAdsClient(cfg *Config) *GoogleAdsClient {
+func NewGoogleAdsClient(cfg *config.Config) *GoogleAdsClient {
 	return &GoogleAdsClient{
 		developerToken:  cfg.GoogleAdsDeveloperToken,
 		clientID:        cfg.GoogleAdsClientID,
@@ -59,9 +61,9 @@ func (c *GoogleAdsClient) ensureToken() (string, error) {
 }
 
 // FetchAds consulta métricas mensuales agregadas por campaña (clics + costo).
-func (c *GoogleAdsClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]MetricaAnuncio, error) {
-	inicio := primerDiaMes(desde, loc)
-	finIncl := primerDiaMes(hasta, loc).AddDate(0, 1, 0).AddDate(0, 0, -1)
+func (c *GoogleAdsClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]domain.MetricaAnuncio, error) {
+	inicio := domain.PrimerDiaMes(desde, loc)
+	finIncl := domain.PrimerDiaMes(hasta, loc).AddDate(0, 1, 0).AddDate(0, 0, -1)
 
 	query := fmt.Sprintf(`
 SELECT
@@ -79,7 +81,7 @@ WHERE segments.date BETWEEN '%s' AND '%s'
 		return nil, err
 	}
 
-	agg := map[string]*MetricaAnuncio{}
+	agg := map[string]*domain.MetricaAnuncio{}
 	for _, raw := range rows {
 		var row struct {
 			Campaign struct {
@@ -111,29 +113,29 @@ WHERE segments.date BETWEEN '%s' AND '%s'
 		if err != nil {
 			continue
 		}
-		mes = primerDiaMes(mes, loc)
+		mes = domain.PrimerDiaMes(mes, loc)
 
 		clicks := parseJSONInt(row.Metrics.Clicks)
 		costMicros := parseJSONInt(row.Metrics.CostMicros)
 		inversion := float64(costMicros) / 1_000_000.0
 
-		key := PlataformaGoogle + "|" + tipoCliente + "|" + mes.Format("2006-01") + "|" + TipoResultadoClics
+		key := domain.PlataformaGoogle + "|" + tipoCliente + "|" + mes.Format("2006-01") + "|" + domain.TipoResultadoClics
 		if cur, ok := agg[key]; ok {
 			cur.Resultado += clicks
 			cur.Inversion += inversion
 		} else {
-			agg[key] = &MetricaAnuncio{
-				Plataforma:    PlataformaGoogle,
+			agg[key] = &domain.MetricaAnuncio{
+				Plataforma:    domain.PlataformaGoogle,
 				TipoCliente:   tipoCliente,
 				Mes:           mes,
-				TipoResultado: TipoResultadoClics,
+				TipoResultado: domain.TipoResultadoClics,
 				Resultado:     clicks,
 				Inversion:     inversion,
 			}
 		}
 	}
 
-	out := make([]MetricaAnuncio, 0, len(agg))
+	out := make([]domain.MetricaAnuncio, 0, len(agg))
 	for _, v := range agg {
 		// Redondeo a 2 decimales
 		v.Inversion = float64(int64(v.Inversion*100+0.5)) / 100
@@ -175,7 +177,7 @@ func (c *GoogleAdsClient) search(query string) ([]json.RawMessage, error) {
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("google ads HTTP %d: %s", resp.StatusCode, recortar(string(body), 500))
+		return nil, fmt.Errorf("google ads HTTP %d: %s", resp.StatusCode, domain.Recortar(string(body), 500))
 	}
 
 	// searchStream puede devolver un array de batches o un solo objeto.
@@ -194,7 +196,7 @@ func (c *GoogleAdsClient) search(query string) ([]json.RawMessage, error) {
 		Results []json.RawMessage `json:"results"`
 	}
 	if err := json.Unmarshal(body, &single); err != nil {
-		return nil, fmt.Errorf("google ads JSON: %w (%s)", err, recortar(string(body), 300))
+		return nil, fmt.Errorf("google ads JSON: %w (%s)", err, domain.Recortar(string(body), 300))
 	}
 	return single.Results, nil
 }

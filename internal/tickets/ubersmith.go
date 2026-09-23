@@ -1,6 +1,8 @@
-package main
+package tickets
 
 import (
+	"agente_marketing/internal/config"
+	"agente_marketing/internal/domain"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,7 +21,7 @@ type UbersmithClient struct {
 	http    *http.Client
 }
 
-func NewUbersmithClient(cfg *Config) *UbersmithClient {
+func NewUbersmithClient(cfg *config.Config) *UbersmithClient {
 	return &UbersmithClient{
 		baseURL: strings.TrimRight(cfg.UbersmithBaseURL, "/") + "/",
 		user:    cfg.UbersmithUser,
@@ -56,7 +58,7 @@ func (c *UbersmithClient) call(method string, params url.Values) (json.RawMessag
 		return nil, fmt.Errorf("%s: leer respuesta: %w", method, err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("%s: HTTP %d: %s", method, resp.StatusCode, recortar(string(body), 300))
+		return nil, fmt.Errorf("%s: HTTP %d: %s", method, resp.StatusCode, domain.Recortar(string(body), 300))
 	}
 
 	var apiResp struct {
@@ -66,7 +68,7 @@ func (c *UbersmithClient) call(method string, params url.Values) (json.RawMessag
 		Data         json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, fmt.Errorf("%s: JSON inválido: %w (%s)", method, err, recortar(string(body), 300))
+		return nil, fmt.Errorf("%s: JSON inválido: %w (%s)", method, err, domain.Recortar(string(body), 300))
 	}
 	if !apiResp.Status {
 		return nil, fmt.Errorf("%s: API error (%v): %s", method, apiResp.ErrorCode, apiResp.ErrorMessage)
@@ -75,13 +77,13 @@ func (c *UbersmithClient) call(method string, params url.Values) (json.RawMessag
 }
 
 // ListarTicketsActualizados replica el nodo 2: activity_begin = hace 7 días, internal_ticket=2.
-func (c *UbersmithClient) ListarTicketsActualizados() (map[string]TicketItem, error) {
+func (c *UbersmithClient) ListarTicketsActualizados() (map[string]domain.TicketItem, error) {
 	haceUnaSemana := time.Now().Add(-7 * 24 * time.Hour)
 	return c.ListarTicketsEnRango(haceUnaSemana, time.Time{})
 }
 
 // ListarTicketsEnRango consulta support.ticket_list con activity_begin y, si end no es cero, activity_end.
-func (c *UbersmithClient) ListarTicketsEnRango(begin, end time.Time) (map[string]TicketItem, error) {
+func (c *UbersmithClient) ListarTicketsEnRango(begin, end time.Time) (map[string]domain.TicketItem, error) {
 	params := url.Values{}
 	params.Set("activity_begin", strconv.FormatInt(begin.Unix(), 10))
 	if !end.IsZero() {
@@ -119,7 +121,7 @@ func periodosMensuales(desde, hasta time.Time, loc *time.Location) [][2]time.Tim
 }
 
 // ObtenerTicket replica el nodo 5: support.ticket_get.
-func (c *UbersmithClient) ObtenerTicket(ticketID string) (*TicketItem, error) {
+func (c *UbersmithClient) ObtenerTicket(ticketID string) (*domain.TicketItem, error) {
 	params := url.Values{}
 	params.Set("ticket_id", ticketID)
 
@@ -136,7 +138,7 @@ func (c *UbersmithClient) ObtenerTicket(ticketID string) (*TicketItem, error) {
 }
 
 // ListarPosts replica el nodo 6: support.ticket_post_list.
-func (c *UbersmithClient) ListarPosts(ticketID string) ([]TicketPost, error) {
+func (c *UbersmithClient) ListarPosts(ticketID string) ([]domain.TicketPost, error) {
 	params := url.Values{}
 	params.Set("ticket_id", ticketID)
 
@@ -152,28 +154,28 @@ func (c *UbersmithClient) ListarPosts(ticketID string) ([]TicketPost, error) {
 	return posts, nil
 }
 
-func decodeTicketMap(raw json.RawMessage) (map[string]TicketItem, error) {
+func decodeTicketMap(raw json.RawMessage) (map[string]domain.TicketItem, error) {
 	if esDataVacia(raw) {
-		return map[string]TicketItem{}, nil
+		return map[string]domain.TicketItem{}, nil
 	}
-	var tickets map[string]TicketItem
+	var tickets map[string]domain.TicketItem
 	if err := json.Unmarshal(raw, &tickets); err != nil {
 		return nil, fmt.Errorf("ticket_list: data inesperada: %w", err)
 	}
 	return tickets, nil
 }
 
-func unwrapTicket(raw json.RawMessage) (*TicketItem, error) {
+func unwrapTicket(raw json.RawMessage) (*domain.TicketItem, error) {
 	if esDataVacia(raw) {
 		return nil, fmt.Errorf("respuesta vacía")
 	}
 
-	var directo TicketItem
+	var directo domain.TicketItem
 	if err := json.Unmarshal(raw, &directo); err == nil && directo.TicketID.String() != "" {
 		return &directo, nil
 	}
 
-	var wrapped map[string]TicketItem
+	var wrapped map[string]domain.TicketItem
 	if err := json.Unmarshal(raw, &wrapped); err != nil {
 		return nil, err
 	}
@@ -186,15 +188,15 @@ func unwrapTicket(raw json.RawMessage) (*TicketItem, error) {
 	return nil, fmt.Errorf("no se encontró ticket_id en la respuesta")
 }
 
-func decodePostMap(raw json.RawMessage) ([]TicketPost, error) {
+func decodePostMap(raw json.RawMessage) ([]domain.TicketPost, error) {
 	if esDataVacia(raw) {
 		return nil, nil
 	}
-	var postsMap map[string]TicketPost
+	var postsMap map[string]domain.TicketPost
 	if err := json.Unmarshal(raw, &postsMap); err != nil {
 		return nil, err
 	}
-	posts := make([]TicketPost, 0, len(postsMap))
+	posts := make([]domain.TicketPost, 0, len(postsMap))
 	for _, p := range postsMap {
 		posts = append(posts, p)
 	}
@@ -204,12 +206,4 @@ func decodePostMap(raw json.RawMessage) ([]TicketPost, error) {
 func esDataVacia(raw json.RawMessage) bool {
 	s := strings.TrimSpace(string(raw))
 	return s == "" || s == "null" || s == "[]" || s == `""`
-}
-
-func recortar(s string, n int) string {
-	s = strings.TrimSpace(s)
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
 }

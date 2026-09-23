@@ -1,6 +1,8 @@
-package main
+package marketing
 
 import (
+	"agente_marketing/internal/config"
+	"agente_marketing/internal/domain"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,7 +13,7 @@ import (
 
 // probeGoogleAds valida OAuth + acceso a la cuenta y muestra cómo se clasifican
 // las campañas con ADS_RESIDENCIAL_PATTERN / ADS_COMERCIAL_PATTERN.
-func probeGoogleAds(cfg *Config) error {
+func probeGoogleAds(cfg *config.Config) error {
 	if !cfg.GoogleAdsEnabled() {
 		return fmt.Errorf("faltan variables GOOGLE_ADS_* (developer token, client id/secret, refresh token, customer id)")
 	}
@@ -73,9 +75,9 @@ ORDER BY campaign.name
 		tipo := client.class.ClasificarTipoCliente(row.Campaign.Name)
 		etiqueta := tipo
 		switch tipo {
-		case TipoClienteResidencial:
+		case domain.TipoClienteResidencial:
 			residencial++
-		case TipoClienteComercial:
+		case domain.TipoClienteComercial:
 			comercial++
 		default:
 			sinMatch++
@@ -123,8 +125,8 @@ ORDER BY campaign.name
 	return nil
 }
 
-func runProbeGoogleAds() {
-	cfg, err := LoadConfig()
+func RunProbeGoogleAds() {
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}

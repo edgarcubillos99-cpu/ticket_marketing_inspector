@@ -1,6 +1,8 @@
-package main
+package marketing
 
 import (
+	"agente_marketing/internal/config"
+	"agente_marketing/internal/domain"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,11 +34,11 @@ type GMBClient struct {
 	tokenExpiry time.Time
 }
 
-func NewGMBClient(cfg *Config) *GMBClient {
+func NewGMBClient(cfg *config.Config) *GMBClient {
 	return &GMBClient{
-		clientID:     cfg.gmbOAuthClientID(),
-		clientSecret: cfg.gmbOAuthClientSecret(),
-		refreshToken: cfg.gmbOAuthRefreshToken(),
+		clientID:     cfg.GMBOauthClientID(),
+		clientSecret: cfg.GMBOauthClientSecret(),
+		refreshToken: cfg.GMBOauthRefreshToken(),
 		accountID:    normalizeGMBAccountID(cfg.GMBAccountID),
 		locationMap:  parseGMBLocationMap(cfg.GMBLocationMap),
 		http:         &http.Client{Timeout: 120 * time.Second},
@@ -129,13 +131,13 @@ func (c *GMBClient) get(rawURL string, params url.Values, out any) error {
 		return fmt.Errorf("gmb leer: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("gmb HTTP %d: %s", resp.StatusCode, recortar(string(body), 500))
+		return fmt.Errorf("gmb HTTP %d: %s", resp.StatusCode, domain.Recortar(string(body), 500))
 	}
 	if out == nil {
 		return nil
 	}
 	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("gmb JSON: %w (%s)", err, recortar(string(body), 300))
+		return fmt.Errorf("gmb JSON: %w (%s)", err, domain.Recortar(string(body), 300))
 	}
 	return nil
 }
@@ -263,7 +265,7 @@ func (c *GMBClient) ResolveLocations() ([]GMBLocation, error) {
 	return out, nil
 }
 
-func (c *GMBClient) Fetch(desde, hasta time.Time, loc *time.Location) ([]MetricaMyBusiness, error) {
+func (c *GMBClient) Fetch(desde, hasta time.Time, loc *time.Location) ([]domain.MetricaMyBusiness, error) {
 	sedes, err := c.ResolveLocations()
 	if err != nil {
 		return nil, err
@@ -272,8 +274,8 @@ func (c *GMBClient) Fetch(desde, hasta time.Time, loc *time.Location) ([]Metrica
 		return nil, fmt.Errorf("gmb: no hay ubicaciones (configura GMB_LOCATION_MAP o verifica acceso a los perfiles)")
 	}
 
-	meses := mesesEnRango(desde, hasta, loc)
-	var out []MetricaMyBusiness
+	meses := domain.MesesEnRango(desde, hasta, loc)
+	var out []domain.MetricaMyBusiness
 	for _, sede := range sedes {
 		for _, mes := range meses {
 			m, err := c.fetchMes(sede, mes, loc)
@@ -286,8 +288,8 @@ func (c *GMBClient) Fetch(desde, hasta time.Time, loc *time.Location) ([]Metrica
 	return out, nil
 }
 
-func (c *GMBClient) fetchMes(sede GMBLocation, mes time.Time, loc *time.Location) (MetricaMyBusiness, error) {
-	inicio := primerDiaMes(mes, loc)
+func (c *GMBClient) fetchMes(sede GMBLocation, mes time.Time, loc *time.Location) (domain.MetricaMyBusiness, error) {
+	inicio := domain.PrimerDiaMes(mes, loc)
 	fin := inicio.AddDate(0, 1, 0).AddDate(0, 0, -1)
 	hoy := time.Now().In(loc)
 	if fin.After(hoy) {
@@ -351,7 +353,7 @@ func (c *GMBClient) fetchMes(sede GMBLocation, mes time.Time, loc *time.Location
 			params.Add("dailyMetrics", metric)
 		}
 		if err2 := c.get(endpoint, params, &resp); err2 != nil {
-			return MetricaMyBusiness{}, err
+			return domain.MetricaMyBusiness{}, err
 		}
 	}
 
@@ -376,7 +378,7 @@ func (c *GMBClient) fetchMes(sede GMBLocation, mes time.Time, loc *time.Location
 	comoLlegar := sums["BUSINESS_DIRECTION_REQUESTS"]
 	web := sums["WEBSITE_CLICKS"]
 
-	return MetricaMyBusiness{
+	return domain.MetricaMyBusiness{
 		Sede:                 sede.Sede,
 		Mes:                  inicio,
 		Vistas:               vistas,

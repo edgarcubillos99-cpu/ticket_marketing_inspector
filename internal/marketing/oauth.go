@@ -1,4 +1,4 @@
-package main
+package marketing
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"agente_marketing/internal/domain"
 	"github.com/joho/godotenv"
 )
 
@@ -43,7 +44,7 @@ func googleRefreshAccessToken(httpClient *http.Client, clientID, clientSecret, r
 		return "", time.Time{}, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", time.Time{}, fmt.Errorf("google oauth HTTP %d: %s", resp.StatusCode, recortar(string(body), 300))
+		return "", time.Time{}, fmt.Errorf("google oauth HTTP %d: %s", resp.StatusCode, domain.Recortar(string(body), 300))
 	}
 
 	var tok struct {
@@ -64,7 +65,7 @@ func googleRefreshAccessToken(httpClient *http.Client, clientID, clientSecret, r
 	return tok.AccessToken, time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second), nil
 }
 
-func runGoogleOAuth() {
+func RunGoogleOAuth() {
 	_ = godotenv.Load()
 	clientID := strings.TrimSpace(firstNonEmpty(os.Getenv("GMB_CLIENT_ID"), os.Getenv("GOOGLE_ADS_CLIENT_ID")))
 	clientSecret := strings.TrimSpace(firstNonEmpty(os.Getenv("GMB_CLIENT_SECRET"), os.Getenv("GOOGLE_ADS_CLIENT_SECRET")))
@@ -173,7 +174,7 @@ func runGoogleOAuth() {
 		log.Fatal(err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		log.Fatalf("token HTTP %d: %s", resp.StatusCode, recortar(string(body), 400))
+		log.Fatalf("token HTTP %d: %s", resp.StatusCode, domain.Recortar(string(body), 400))
 	}
 
 	var tok struct {
@@ -190,7 +191,7 @@ func runGoogleOAuth() {
 		fmt.Println("Google no devolvió refresh_token. Suele pasar si ya autorizaste antes.")
 		fmt.Println("Vuelve a correr con prompt=consent (este comando ya lo pide) o revoca el acceso en:")
 		fmt.Println("  https://myaccount.google.com/permissions")
-		fmt.Println("Respuesta:", recortar(string(body), 400))
+		fmt.Println("Respuesta:", domain.Recortar(string(body), 400))
 		os.Exit(1)
 	}
 

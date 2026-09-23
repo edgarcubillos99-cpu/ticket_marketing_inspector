@@ -1,4 +1,4 @@
-package main
+package tickets
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"agente_marketing/internal/config"
+	"agente_marketing/internal/domain"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -68,17 +70,17 @@ type Analizador struct {
 	model  string
 }
 
-func NewAnalizador(cfg *Config) *Analizador {
+func NewAnalizador(cfg *config.Config) *Analizador {
 	return &Analizador{
 		client: openai.NewClient(cfg.OpenAIKey),
 		model:  cfg.OpenAIModel,
 	}
 }
 
-func (a *Analizador) Analizar(ticket TicketNormalizado) (TicketNormalizado, error) {
+func (a *Analizador) Analizar(ticket domain.TicketNormalizado) (domain.TicketNormalizado, error) {
 	historialJSON, err := json.MarshalIndent(ticket.HistorialLimpio, "", "  ")
 	if err != nil {
-		return TicketNormalizado{}, fmt.Errorf("serializar historial: %w", err)
+		return domain.TicketNormalizado{}, fmt.Errorf("serializar historial: %w", err)
 	}
 
 	userPrompt := fmt.Sprintf(`Por favor, analiza este ticket:
@@ -110,20 +112,20 @@ Historial completo a analizar:
 		},
 	})
 	if err != nil {
-		return TicketNormalizado{}, err
+		return domain.TicketNormalizado{}, err
 	}
 	if len(resp.Choices) == 0 {
-		return TicketNormalizado{}, fmt.Errorf("la IA no devolvió choices")
+		return domain.TicketNormalizado{}, fmt.Errorf("la IA no devolvió choices")
 	}
 
 	resultado, err := parsearRespuestaIA(resp.Choices[0].Message.Content, ticket.TicketID)
 	if err != nil {
-		return TicketNormalizado{}, err
+		return domain.TicketNormalizado{}, err
 	}
 	return resultado, nil
 }
 
-func parsearRespuestaIA(rawText, ticketIDOriginal string) (TicketNormalizado, error) {
+func parsearRespuestaIA(rawText, ticketIDOriginal string) (domain.TicketNormalizado, error) {
 	rawText = strings.TrimSpace(rawText)
 	rawText = strings.ReplaceAll(rawText, "```json", "")
 	rawText = strings.ReplaceAll(rawText, "```JSON", "")
@@ -132,7 +134,7 @@ func parsearRespuestaIA(rawText, ticketIDOriginal string) (TicketNormalizado, er
 
 	var m map[string]any
 	if err := json.Unmarshal([]byte(rawText), &m); err != nil {
-		return TicketNormalizado{}, fmt.Errorf("JSON inválido de la IA: %w; raw=%s", err, recortar(rawText, 400))
+		return domain.TicketNormalizado{}, fmt.Errorf("JSON inválido de la IA: %w; raw=%s", err, domain.Recortar(rawText, 400))
 	}
 
 	id := valorTexto(m, "Ticket ID")
@@ -140,7 +142,7 @@ func parsearRespuestaIA(rawText, ticketIDOriginal string) (TicketNormalizado, er
 		id = ticketIDOriginal
 	}
 
-	return TicketNormalizado{
+	return domain.TicketNormalizado{
 		TicketID:      id,
 		TipoCliente:   valorTexto(m, "Tipo de Cliente"),
 		Subject:       valorTexto(m, "Subject"),

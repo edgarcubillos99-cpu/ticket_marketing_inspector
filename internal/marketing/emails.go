@@ -1,6 +1,8 @@
-package main
+package marketing
 
 import (
+	"agente_marketing/internal/config"
+	"agente_marketing/internal/domain"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,7 +27,7 @@ type EmailsClient struct {
 	http        *http.Client
 }
 
-func NewEmailsClient(cfg *Config) (*EmailsClient, error) {
+func NewEmailsClient(cfg *config.Config) (*EmailsClient, error) {
 	forms, err := parseEmailsFormMap(cfg.EmailsFormMap)
 	if err != nil {
 		return nil, err
@@ -93,13 +95,13 @@ func (c *EmailsClient) get(path string, params url.Values, out any) error {
 		return fmt.Errorf("emails leer: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("emails HTTP %d: %s", resp.StatusCode, recortar(string(body), 400))
+		return fmt.Errorf("emails HTTP %d: %s", resp.StatusCode, domain.Recortar(string(body), 400))
 	}
 	if out == nil {
 		return nil
 	}
 	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("emails JSON: %w (%s)", err, recortar(string(body), 300))
+		return fmt.Errorf("emails JSON: %w (%s)", err, domain.Recortar(string(body), 300))
 	}
 	return nil
 }
@@ -120,7 +122,7 @@ func (c *EmailsClient) ListForms() ([]gravityForm, error) {
 	}
 	var obj map[string]gravityForm
 	if err := json.Unmarshal(raw, &obj); err != nil {
-		return nil, fmt.Errorf("emails forms JSON: %w (%s)", err, recortar(string(raw), 300))
+		return nil, fmt.Errorf("emails forms JSON: %w (%s)", err, domain.Recortar(string(raw), 300))
 	}
 	out := make([]gravityForm, 0, len(obj))
 	for _, f := range obj {
@@ -129,19 +131,19 @@ func (c *EmailsClient) ListForms() ([]gravityForm, error) {
 	return out, nil
 }
 
-func (c *EmailsClient) Fetch(desde, hasta time.Time, loc *time.Location) ([]MetricaEmail, error) {
-	meses := mesesEnRango(desde, hasta, loc)
-	var out []MetricaEmail
+func (c *EmailsClient) Fetch(desde, hasta time.Time, loc *time.Location) ([]domain.MetricaEmail, error) {
+	meses := domain.MesesEnRango(desde, hasta, loc)
+	var out []domain.MetricaEmail
 	for _, form := range c.forms {
 		for _, mes := range meses {
 			n, err := c.contarEntradasMes(form.FormID, mes, loc)
 			if err != nil {
 				return nil, fmt.Errorf("form %d %s: %w", form.FormID, mes.Format("2006-01"), err)
 			}
-			out = append(out, MetricaEmail{
+			out = append(out, domain.MetricaEmail{
 				Tipo:        form.Tipo,
 				TipoCliente: form.TipoCliente,
-				Mes:         primerDiaMes(mes, loc),
+				Mes:         domain.PrimerDiaMes(mes, loc),
 				Cantidad:    n,
 			})
 		}
@@ -150,7 +152,7 @@ func (c *EmailsClient) Fetch(desde, hasta time.Time, loc *time.Location) ([]Metr
 }
 
 func (c *EmailsClient) contarEntradasMes(formID int, mes time.Time, loc *time.Location) (int64, error) {
-	inicio := primerDiaMes(mes, loc)
+	inicio := domain.PrimerDiaMes(mes, loc)
 	fin := inicio.AddDate(0, 1, 0).Add(-time.Second)
 	search, _ := json.Marshal(map[string]string{
 		"start_date": inicio.Format("2006-01-02 15:04:05"),

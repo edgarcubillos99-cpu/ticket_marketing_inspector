@@ -1,6 +1,7 @@
-package main
+package marketing
 
 import (
+	"agente_marketing/internal/domain"
 	"regexp"
 	"strings"
 )
@@ -30,10 +31,10 @@ func (c *clasificadorCliente) ClasificarTipoCliente(nombre string) string {
 		return ""
 	}
 	if c.comercial != nil && c.comercial.MatchString(nombre) {
-		return TipoClienteComercial
+		return domain.TipoClienteComercial
 	}
 	if c.residencial != nil && c.residencial.MatchString(nombre) {
-		return TipoClienteResidencial
+		return domain.TipoClienteResidencial
 	}
 	return ""
 }

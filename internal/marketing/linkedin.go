@@ -1,6 +1,8 @@
-package main
+package marketing
 
 import (
+	"agente_marketing/internal/config"
+	"agente_marketing/internal/domain"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,7 +22,7 @@ type LinkedInClient struct {
 	class    *clasificadorCliente
 }
 
-func NewLinkedInClient(cfg *Config) *LinkedInClient {
+func NewLinkedInClient(cfg *config.Config) *LinkedInClient {
 	return &LinkedInClient{
 		token:    cfg.LinkedInAccessToken,
 		orgID:    cfg.LinkedInOrganizationID,
@@ -65,21 +67,21 @@ func (c *LinkedInClient) get(endpoint string, params url.Values, out any) error 
 		return fmt.Errorf("linkedin leer: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("linkedin HTTP %d: %s", resp.StatusCode, recortar(string(body), 400))
+		return fmt.Errorf("linkedin HTTP %d: %s", resp.StatusCode, domain.Recortar(string(body), 400))
 	}
 	if out == nil {
 		return nil
 	}
 	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("linkedin JSON: %w (%s)", err, recortar(string(body), 300))
+		return fmt.Errorf("linkedin JSON: %w (%s)", err, domain.Recortar(string(body), 300))
 	}
 	return nil
 }
 
 // FetchOrganico obtiene share + follower statistics mensuales de la página de empresa.
-func (c *LinkedInClient) FetchOrganico(desde, hasta time.Time, loc *time.Location) ([]MetricaRedSocial, error) {
-	meses := mesesEnRango(desde, hasta, loc)
-	out := make([]MetricaRedSocial, 0, len(meses))
+func (c *LinkedInClient) FetchOrganico(desde, hasta time.Time, loc *time.Location) ([]domain.MetricaRedSocial, error) {
+	meses := domain.MesesEnRango(desde, hasta, loc)
+	out := make([]domain.MetricaRedSocial, 0, len(meses))
 
 	for _, mes := range meses {
 		m, err := c.mesOrganico(mes, loc)
@@ -91,11 +93,11 @@ func (c *LinkedInClient) FetchOrganico(desde, hasta time.Time, loc *time.Locatio
 	return out, nil
 }
 
-func (c *LinkedInClient) mesOrganico(mes time.Time, loc *time.Location) (MetricaRedSocial, error) {
-	inicio := primerDiaMes(mes, loc)
+func (c *LinkedInClient) mesOrganico(mes time.Time, loc *time.Location) (domain.MetricaRedSocial, error) {
+	inicio := domain.PrimerDiaMes(mes, loc)
 	fin := inicio.AddDate(0, 1, 0)
-	m := MetricaRedSocial{
-		Plataforma: PlataformaLinkedIn,
+	m := domain.MetricaRedSocial{
+		Plataforma: domain.PlataformaLinkedIn,
 		Mes:        inicio,
 	}
 
@@ -113,13 +115,13 @@ func (c *LinkedInClient) mesOrganico(mes time.Time, loc *time.Location) (Metrica
 	var shareResp struct {
 		Elements []struct {
 			TotalShareStatistics struct {
-				ImpressionCount  int64 `json:"impressionCount"`
-				UniqueImpressionsCount int64 `json:"uniqueImpressionsCount"`
-				LikeCount        int64 `json:"likeCount"`
-				CommentCount     int64 `json:"commentCount"`
-				ShareCount       int64 `json:"shareCount"`
-				ClickCount       int64 `json:"clickCount"`
-				Engagement       float64 `json:"engagement"`
+				ImpressionCount        int64   `json:"impressionCount"`
+				UniqueImpressionsCount int64   `json:"uniqueImpressionsCount"`
+				LikeCount              int64   `json:"likeCount"`
+				CommentCount           int64   `json:"commentCount"`
+				ShareCount             int64   `json:"shareCount"`
+				ClickCount             int64   `json:"clickCount"`
+				Engagement             float64 `json:"engagement"`
 			} `json:"totalShareStatistics"`
 		} `json:"elements"`
 	}
@@ -171,13 +173,13 @@ func (c *LinkedInClient) mesOrganico(mes time.Time, loc *time.Location) (Metrica
 }
 
 // FetchAds obtiene analytics mensuales de LinkedIn Campaign Manager.
-func (c *LinkedInClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]MetricaAnuncio, error) {
+func (c *LinkedInClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([]domain.MetricaAnuncio, error) {
 	if c.adAcctID == "" {
 		return nil, nil
 	}
 
-	inicio := primerDiaMes(desde, loc)
-	fin := primerDiaMes(hasta, loc).AddDate(0, 1, 0)
+	inicio := domain.PrimerDiaMes(desde, loc)
+	fin := domain.PrimerDiaMes(hasta, loc).AddDate(0, 1, 0)
 	accountURN := "urn:li:sponsoredAccount:" + strings.TrimPrefix(c.adAcctID, "urn:li:sponsoredAccount:")
 
 	// Lista campañas para clasificar Residencial/Comercial por nombre.
@@ -186,13 +188,13 @@ func (c *LinkedInClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([
 		return nil, err
 	}
 
-	agg := map[string]*MetricaAnuncio{}
+	agg := map[string]*domain.MetricaAnuncio{}
 
 	for campID, nombre := range campañas {
 		tipoCliente := c.class.ClasificarTipoCliente(nombre)
 		if tipoCliente == "" {
 			// En el reporte histórico LinkedIn aparece solo como Comercial.
-			tipoCliente = TipoClienteComercial
+			tipoCliente = domain.TipoClienteComercial
 		}
 
 		analyticsURL := "https://api.linkedin.com/rest/adAnalytics" +
@@ -200,7 +202,7 @@ func (c *LinkedInClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([
 			"&pivot=CAMPAIGN" +
 			"&timeGranularity=MONTHLY" +
 			"&dateRange=" + url.QueryEscape(fmt.Sprintf("(start:(year:%d,month:%d,day:1),end:(year:%d,month:%d,day:1))",
-				inicio.Year(), int(inicio.Month()), fin.Year(), int(fin.Month()))) +
+			inicio.Year(), int(inicio.Month()), fin.Year(), int(fin.Month()))) +
 			"&campaigns=List(" + url.QueryEscape("urn:li:sponsoredCampaign:"+campID) + ")" +
 			"&fields=clicks,costInLocalCurrency,dateRange,pivotValues"
 
@@ -224,16 +226,16 @@ func (c *LinkedInClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([
 		for _, el := range resp.Elements {
 			mes := time.Date(el.DateRange.Start.Year, time.Month(el.DateRange.Start.Month), 1, 0, 0, 0, 0, loc)
 			spend, _ := strconv.ParseFloat(el.CostInLocalCurrency, 64)
-			key := PlataformaLinkedIn + "|" + tipoCliente + "|" + mes.Format("2006-01") + "|" + TipoResultadoClics
+			key := domain.PlataformaLinkedIn + "|" + tipoCliente + "|" + mes.Format("2006-01") + "|" + domain.TipoResultadoClics
 			if cur, ok := agg[key]; ok {
 				cur.Resultado += el.Clicks
 				cur.Inversion += spend
 			} else {
-				agg[key] = &MetricaAnuncio{
-					Plataforma:    PlataformaLinkedIn,
+				agg[key] = &domain.MetricaAnuncio{
+					Plataforma:    domain.PlataformaLinkedIn,
 					TipoCliente:   tipoCliente,
 					Mes:           mes,
-					TipoResultado: TipoResultadoClics,
+					TipoResultado: domain.TipoResultadoClics,
 					Resultado:     el.Clicks,
 					Inversion:     spend,
 				}
@@ -241,7 +243,7 @@ func (c *LinkedInClient) FetchAds(desde, hasta time.Time, loc *time.Location) ([
 		}
 	}
 
-	out := make([]MetricaAnuncio, 0, len(agg))
+	out := make([]domain.MetricaAnuncio, 0, len(agg))
 	for _, v := range agg {
 		out = append(out, *v)
 	}
@@ -255,9 +257,9 @@ func (c *LinkedInClient) listarCampañas(accountURN string) (map[string]string, 
 
 	var resp struct {
 		Elements []struct {
-			ID     json.RawMessage `json:"id"`
-			Name   string          `json:"name"`
-			IDStr  string          `json:"-"`
+			ID    json.RawMessage `json:"id"`
+			Name  string          `json:"name"`
+			IDStr string          `json:"-"`
 		} `json:"elements"`
 	}
 	if err := c.get(endpoint, nil, &resp); err != nil {

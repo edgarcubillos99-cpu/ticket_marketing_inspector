@@ -1,51 +1,54 @@
-package main
+package tickets
 
-import "testing"
+import (
+	"agente_marketing/internal/domain"
+	"testing"
+)
 
 func TestFiltrarTicketsValidos(t *testing.T) {
-	tickets := map[string]TicketItem{
+	tickets := map[string]domain.TicketItem{
 		"1": {
 			TicketID:  "1",
 			Subject:   "Solicitud Nueva - Bayamón",
 			Timestamp: "100",
-			Metadata:  &TicketMetadata{SLA: "Residencial"},
+			Metadata:  &domain.TicketMetadata{SLA: "Residencial"},
 		},
 		"2": {
 			TicketID:  "2",
 			Subject:   "Solicitud Nueva Test Automatico",
 			Timestamp: "200",
-			Metadata:  &TicketMetadata{SLA: "Residencial"},
+			Metadata:  &domain.TicketMetadata{SLA: "Residencial"},
 		},
 		"3": {
 			TicketID:  "3",
 			Subject:   "Solicitud Nueva Comercial",
 			Timestamp: "300",
-			Metadata:  &TicketMetadata{SLA: "Comercial"},
+			Metadata:  &domain.TicketMetadata{SLA: "Comercial"},
 		},
 		"4": {
 			TicketID:  "4",
 			Subject:   "Cambio de plan",
 			Timestamp: "400",
-			Metadata:  &TicketMetadata{SLA: "Residencial"},
+			Metadata:  &domain.TicketMetadata{SLA: "Residencial"},
 		},
 		"5": {
 			TicketID:  "5",
 			Subject:   "solicitud de nuevo servicio test automatico residencial",
 			Timestamp: "500",
-			Metadata:  &TicketMetadata{SLA: "Residencial"},
+			Metadata:  &domain.TicketMetadata{SLA: "Residencial"},
 		},
 		"6": {
 			TicketID:  "6",
 			Subject:   "SOLICITUD NUEVA Ponce",
 			Timestamp: "50",
-			Metadata:  &TicketMetadata{SLA: "Residencial"},
+			Metadata:  &domain.TicketMetadata{SLA: "Residencial"},
 		},
 		"7": {
 			TicketID:  "7",
 			Subject:   "Solicitud Nueva - Fibra",
 			Timestamp: "600",
 			QName:     "Cola FX",
-			Metadata:  &TicketMetadata{SLA: "Residencial"},
+			Metadata:  &domain.TicketMetadata{SLA: "Residencial"},
 		},
 	}
 

@@ -1,13 +1,15 @@
-package main
+package marketing
 
 import (
+	"agente_marketing/internal/config"
+	"agente_marketing/internal/domain"
 	"fmt"
 	"log"
 	"strings"
 	"time"
 )
 
-func probeEmails(cfg *Config) error {
+func probeEmails(cfg *config.Config) error {
 	if cfg.EmailsProvider == "" {
 		return fmt.Errorf("EMAILS_PROVIDER vacío. Cuando sepas el plugin, usa EMAILS_PROVIDER=gravityforms (si aplica) más URL, usuario WP y EMAILS_FORM_MAP")
 	}
@@ -42,7 +44,7 @@ func probeEmails(cfg *Config) error {
 	if err != nil {
 		loc = time.Local
 	}
-	hasta := primerDiaMes(time.Now().In(loc), loc)
+	hasta := domain.PrimerDiaMes(time.Now().In(loc), loc)
 	desde := hasta.AddDate(0, -(cfg.MarketingMonthsLookback - 1), 0)
 	rows, err := client.Fetch(desde, hasta, loc)
 	if err != nil {
@@ -56,8 +58,8 @@ func probeEmails(cfg *Config) error {
 	return nil
 }
 
-func runProbeEmails() {
-	cfg, err := LoadConfig()
+func RunProbeEmails() {
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}

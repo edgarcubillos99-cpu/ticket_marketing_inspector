@@ -1,12 +1,14 @@
-package main
+package marketing
 
 import (
+	"agente_marketing/internal/config"
+	"agente_marketing/internal/domain"
 	"fmt"
 	"log"
 	"time"
 )
 
-func probeGMB(cfg *Config) error {
+func probeGMB(cfg *config.Config) error {
 	if !cfg.GMBEnabled() {
 		return fmt.Errorf("falta GMB_REFRESH_TOKEN (y client id/secret de GMB o de Google Ads). Corre: go run . -google-oauth")
 	}
@@ -56,7 +58,7 @@ func probeGMB(cfg *Config) error {
 	if err != nil {
 		loc = time.Local
 	}
-	hasta := primerDiaMes(time.Now().In(loc), loc)
+	hasta := domain.PrimerDiaMes(time.Now().In(loc), loc)
 	desde := hasta.AddDate(0, -(cfg.MarketingMonthsLookback - 1), 0)
 	rows, err := client.Fetch(desde, hasta, loc)
 	if err != nil {
@@ -71,8 +73,8 @@ func probeGMB(cfg *Config) error {
 	return nil
 }
 
-func runProbeGMB() {
-	cfg, err := LoadConfig()
+func RunProbeGMB() {
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}

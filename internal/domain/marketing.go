@@ -1,4 +1,4 @@
-package main
+package domain
 
 import "time"
 
@@ -61,22 +61,22 @@ const (
 	TipoResultadoAlcance       = "Alcance"
 	TipoResultadoThruPlays     = "ThruPlays"
 
-	TipoEmailCobertura             = "Cobertura"
-	TipoEmailInternetResidencial   = "Internet Residencial"
-	TipoEmailTelefoniaResidencial  = "Telefonía Residencial"
-	TipoEmailInternetComercial     = "Internet Comercial"
-	TipoEmailTelefoniaComercial    = "Telefonía Comercial"
-	TipoEmailOtros                 = "Otros"
+	TipoEmailCobertura            = "Cobertura"
+	TipoEmailInternetResidencial  = "Internet Residencial"
+	TipoEmailTelefoniaResidencial = "Telefonía Residencial"
+	TipoEmailInternetComercial    = "Internet Comercial"
+	TipoEmailTelefoniaComercial   = "Telefonía Comercial"
+	TipoEmailOtros                = "Otros"
 )
 
-func primerDiaMes(t time.Time, loc *time.Location) time.Time {
+func PrimerDiaMes(t time.Time, loc *time.Location) time.Time {
 	t = t.In(loc)
 	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, loc)
 }
 
-func mesesEnRango(desde, hasta time.Time, loc *time.Location) []time.Time {
-	desde = primerDiaMes(desde, loc)
-	hasta = primerDiaMes(hasta, loc)
+func MesesEnRango(desde, hasta time.Time, loc *time.Location) []time.Time {
+	desde = PrimerDiaMes(desde, loc)
+	hasta = PrimerDiaMes(hasta, loc)
 	if hasta.Before(desde) {
 		return nil
 	}

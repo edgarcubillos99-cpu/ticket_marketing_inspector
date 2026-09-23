@@ -1,4 +1,4 @@
-package main
+package store
 
 import (
 	"database/sql"
@@ -9,6 +9,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"agente_marketing/internal/config"
+	"agente_marketing/internal/domain"
 	"github.com/go-sql-driver/mysql"
 )
 
@@ -21,7 +23,7 @@ type Store struct {
 	emailsTable string
 }
 
-func NewStore(cfg *Config) (*Store, error) {
+func NewStore(cfg *config.Config) (*Store, error) {
 	mc := mysql.NewConfig()
 	mc.User = cfg.MySQLUser
 	mc.Passwd = cfg.MySQLPassword
@@ -280,7 +282,7 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-func (s *Store) UpsertTicket(t TicketNormalizado) error {
+func (s *Store) UpsertTicket(t domain.TicketNormalizado) error {
 	ticketID, err := strconv.ParseInt(strings.TrimSpace(t.TicketID), 10, 64)
 	if err != nil || ticketID == 0 {
 		return fmt.Errorf("ticket_id inválido %q", t.TicketID)
@@ -320,7 +322,7 @@ ON DUPLICATE KEY UPDATE
 	return nil
 }
 
-func (s *Store) UpsertMetricaSocial(m MetricaRedSocial) error {
+func (s *Store) UpsertMetricaSocial(m domain.MetricaRedSocial) error {
 	if strings.TrimSpace(m.Plataforma) == "" || m.Mes.IsZero() {
 		return fmt.Errorf("metrica social incompleta: plataforma/mes requeridos")
 	}
@@ -357,7 +359,7 @@ ON DUPLICATE KEY UPDATE
 	return nil
 }
 
-func (s *Store) UpsertMetricaAnuncio(m MetricaAnuncio) error {
+func (s *Store) UpsertMetricaAnuncio(m domain.MetricaAnuncio) error {
 	if strings.TrimSpace(m.Plataforma) == "" || strings.TrimSpace(m.TipoCliente) == "" ||
 		strings.TrimSpace(m.TipoResultado) == "" || m.Mes.IsZero() {
 		return fmt.Errorf("metrica anuncio incompleta: plataforma/tipo_cliente/mes/tipo_resultado requeridos")
@@ -386,7 +388,7 @@ ON DUPLICATE KEY UPDATE
 	return nil
 }
 
-func (s *Store) UpsertMetricaMyBusiness(m MetricaMyBusiness) error {
+func (s *Store) UpsertMetricaMyBusiness(m domain.MetricaMyBusiness) error {
 	if strings.TrimSpace(m.Sede) == "" || m.Mes.IsZero() {
 		return fmt.Errorf("metrica mybusiness incompleta: sede/mes requeridos")
 	}
@@ -420,7 +422,7 @@ ON DUPLICATE KEY UPDATE
 	return nil
 }
 
-func (s *Store) UpsertMetricaEmail(m MetricaEmail) error {
+func (s *Store) UpsertMetricaEmail(m domain.MetricaEmail) error {
 	if strings.TrimSpace(m.Tipo) == "" || strings.TrimSpace(m.TipoCliente) == "" || m.Mes.IsZero() {
 		return fmt.Errorf("metrica email incompleta: tipo/tipo_cliente/mes requeridos")
 	}

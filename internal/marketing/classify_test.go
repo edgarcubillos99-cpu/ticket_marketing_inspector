@@ -1,6 +1,9 @@
-package main
+package marketing
 
-import "testing"
+import (
+	"agente_marketing/internal/domain"
+	"testing"
+)
 
 func TestClasificarTipoCliente(t *testing.T) {
 	c := newClasificadorCliente(
@@ -12,14 +15,14 @@ func TestClasificarTipoCliente(t *testing.T) {
 		nombre string
 		want   string
 	}{
-		{"Google Residencial Search", TipoClienteResidencial},
-		{"FB Res - Mensajes", TipoClienteResidencial},
-		{"Busqueda Hogar Osnet 2026", TipoClienteResidencial},
-		{"Display Residencial Osnet 2024 agosto", TipoClienteResidencial},
-		{"Back To School-Display agosto-2026#2 #2", TipoClienteResidencial},
-		{"Tráfico Small Business Osnet 2023", TipoClienteComercial},
-		{"Google Comercial Brand", TipoClienteComercial},
-		{"LinkedIn B2B Leads", TipoClienteComercial},
+		{"Google Residencial Search", domain.TipoClienteResidencial},
+		{"FB Res - Mensajes", domain.TipoClienteResidencial},
+		{"Busqueda Hogar Osnet 2026", domain.TipoClienteResidencial},
+		{"Display Residencial Osnet 2024 agosto", domain.TipoClienteResidencial},
+		{"Back To School-Display agosto-2026#2 #2", domain.TipoClienteResidencial},
+		{"Tráfico Small Business Osnet 2023", domain.TipoClienteComercial},
+		{"Google Comercial Brand", domain.TipoClienteComercial},
+		{"LinkedIn B2B Leads", domain.TipoClienteComercial},
 		{"Campaña genérica sin pistas", ""},
 	}
 
@@ -46,25 +49,24 @@ func TestMetaKPIsFacebook(t *testing.T) {
 	}
 	thruplay := []metaAction{{ActionType: "video_view", Value: "80"}}
 
-	kpis := metaKPIs(PlataformaFacebook, "50", "900", actions, thruplay)
+	kpis := metaKPIs(domain.PlataformaFacebook, "50", "900", actions, thruplay)
 	got := map[string]int64{}
 	for _, k := range kpis {
 		got[k.Tipo] = k.Valor
 	}
-	if got[TipoResultadoLeads] != 12 {
-		t.Fatalf("leads=%d want 12 (max)", got[TipoResultadoLeads])
+	if got[domain.TipoResultadoLeads] != 12 {
+		t.Fatalf("leads=%d want 12 (max)", got[domain.TipoResultadoLeads])
 	}
-	if got[TipoResultadoMensajes] != 5 {
-		t.Fatalf("mensajes=%d", got[TipoResultadoMensajes])
+	if got[domain.TipoResultadoMensajes] != 5 {
+		t.Fatalf("mensajes=%d", got[domain.TipoResultadoMensajes])
 	}
-	if got[TipoResultadoAlcance] != 900 {
-		t.Fatalf("alcance=%d", got[TipoResultadoAlcance])
+	if got[domain.TipoResultadoAlcance] != 900 {
+		t.Fatalf("alcance=%d", got[domain.TipoResultadoAlcance])
 	}
-	if got[TipoResultadoThruPlays] != 80 {
-		t.Fatalf("thruplays=%d", got[TipoResultadoThruPlays])
+	if got[domain.TipoResultadoThruPlays] != 80 {
+		t.Fatalf("thruplays=%d", got[domain.TipoResultadoThruPlays])
 	}
-	if _, ok := got[TipoResultadoInteracciones]; ok {
+	if _, ok := got[domain.TipoResultadoInteracciones]; ok {
 		t.Fatal("facebook no debe emitir Interacciones")
 	}
 }
-

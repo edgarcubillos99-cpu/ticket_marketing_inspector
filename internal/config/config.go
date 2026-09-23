@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"fmt"
@@ -45,17 +45,17 @@ type Config struct {
 	MarketingMonthsLookback int
 
 	// Meta (Facebook + Instagram orgánico y ads)
-	MetaAccessToken             string
-	MetaAPIVersion              string
-	FacebookPageID              string
-	InstagramBusinessAccountID  string
-	MetaAdAccountID             string // sin prefijo act_
+	MetaAccessToken            string
+	MetaAPIVersion             string
+	FacebookPageID             string
+	InstagramBusinessAccountID string
+	MetaAdAccountID            string // sin prefijo act_
 
 	// LinkedIn (orgánico + ads)
-	LinkedInAccessToken  string
+	LinkedInAccessToken    string
 	LinkedInOrganizationID string
-	LinkedInAdAccountID  string
-	LinkedInAPIVersion   string
+	LinkedInAdAccountID    string
+	LinkedInAPIVersion     string
 
 	// Google Ads
 	GoogleAdsDeveloperToken  string
@@ -89,30 +89,30 @@ func LoadConfig() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		UbersmithBaseURL: envOr("UBERSMITH_BASE_URL", "https://billing.osnetpr.com/api/2.0/"),
-		UbersmithUser:    strings.TrimSpace(os.Getenv("UBERSMITH_USER")),
-		UbersmithToken:   strings.TrimSpace(os.Getenv("UBERSMITH_TOKEN")),
-		UbersmithLimit:   envInt("UBERSMITH_LIMIT", 0),
-		OpenAIKey:        strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
-		OpenAIModel:      envOr("OPENAI_MODEL", "gpt-5.6-luna"),
-		MySQLHost:        strings.TrimSpace(os.Getenv("MYSQL_HOST")),
-		MySQLPort:        envOr("MYSQL_PORT", "3306"),
-		MySQLUser:        strings.TrimSpace(os.Getenv("MYSQL_USER")),
-		MySQLPassword:    os.Getenv("MYSQL_PASSWORD"),
-		MySQLDatabase:    strings.TrimSpace(os.Getenv("MYSQL_DATABASE")),
-		MySQLTable:       envOr("MYSQL_TABLE", "tickets_osnet"),
-		MySQLTLS:         strings.TrimSpace(os.Getenv("MYSQL_TLS")),
+		UbersmithBaseURL:     envOr("UBERSMITH_BASE_URL", "https://billing.osnetpr.com/api/2.0/"),
+		UbersmithUser:        strings.TrimSpace(os.Getenv("UBERSMITH_USER")),
+		UbersmithToken:       strings.TrimSpace(os.Getenv("UBERSMITH_TOKEN")),
+		UbersmithLimit:       envInt("UBERSMITH_LIMIT", 0),
+		OpenAIKey:            strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
+		OpenAIModel:          envOr("OPENAI_MODEL", "gpt-5.6-luna"),
+		MySQLHost:            strings.TrimSpace(os.Getenv("MYSQL_HOST")),
+		MySQLPort:            envOr("MYSQL_PORT", "3306"),
+		MySQLUser:            strings.TrimSpace(os.Getenv("MYSQL_USER")),
+		MySQLPassword:        os.Getenv("MYSQL_PASSWORD"),
+		MySQLDatabase:        strings.TrimSpace(os.Getenv("MYSQL_DATABASE")),
+		MySQLTable:           envOr("MYSQL_TABLE", "tickets_osnet"),
+		MySQLTLS:             strings.TrimSpace(os.Getenv("MYSQL_TLS")),
 		MySQLTableSocial:     envOr("MYSQL_TABLE_SOCIAL", "redes_sociales_metricas"),
 		MySQLTableAds:        envOr("MYSQL_TABLE_ADS", "anuncios_metricas"),
 		MySQLTableMyBusiness: envOr("MYSQL_TABLE_MYBUSINESS", "mybusiness_metricas"),
 		MySQLTableEmails:     envOr("MYSQL_TABLE_EMAILS", "emails_metricas"),
-		Port:             envOr("PORT", "8080"),
-		Workers:          envInt("WORKERS", 3),
-		RunOnStart:       envBool("RUN_ON_START"),
-		CronSpec:         envOr("CRON_SPEC", "0 1 * * 0"),
-		CronTZ:           envOr("CRON_TZ", "America/Puerto_Rico"),
-		Backfill:         envBool("BACKFILL"),
-		BackfillFrom:     envOr("BACKFILL_FROM", "2024-01-01"),
+		Port:                 envOr("PORT", "8080"),
+		Workers:              envInt("WORKERS", 3),
+		RunOnStart:           envBool("RUN_ON_START"),
+		CronSpec:             envOr("CRON_SPEC", "0 1 * * 0"),
+		CronTZ:               envOr("CRON_TZ", "America/Puerto_Rico"),
+		Backfill:             envBool("BACKFILL"),
+		BackfillFrom:         envOr("BACKFILL_FROM", "2024-01-01"),
 
 		MarketingMonthsLookback: envInt("MARKETING_MONTHS_LOOKBACK", 3),
 
@@ -208,21 +208,21 @@ func (c *Config) GoogleAdsEnabled() bool {
 		c.GoogleAdsCustomerID != ""
 }
 
-func (c *Config) gmbOAuthClientID() string {
+func (c *Config) GMBOauthClientID() string {
 	if c.GMBClientID != "" {
 		return c.GMBClientID
 	}
 	return c.GoogleAdsClientID
 }
 
-func (c *Config) gmbOAuthClientSecret() string {
+func (c *Config) GMBOauthClientSecret() string {
 	if c.GMBClientSecret != "" {
 		return c.GMBClientSecret
 	}
 	return c.GoogleAdsClientSecret
 }
 
-func (c *Config) gmbOAuthRefreshToken() string {
+func (c *Config) GMBOauthRefreshToken() string {
 	if c.GMBRefreshToken != "" {
 		return c.GMBRefreshToken
 	}
@@ -230,8 +230,8 @@ func (c *Config) gmbOAuthRefreshToken() string {
 }
 
 func (c *Config) GMBEnabled() bool {
-	return c.gmbOAuthClientID() != "" &&
-		c.gmbOAuthClientSecret() != "" &&
+	return c.GMBOauthClientID() != "" &&
+		c.GMBOauthClientSecret() != "" &&
 		c.GMBRefreshToken != ""
 }
 

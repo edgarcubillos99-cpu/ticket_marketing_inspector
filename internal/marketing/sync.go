@@ -135,7 +135,7 @@ func sincronizarMarketingRango(cfg *config.Config, store *store.Store, desde, ha
 	}
 
 	if cfg.EmailsEnabled() {
-		client, err := NewEmailsClient(cfg)
+		client, err := NewEmailsSource(cfg)
 		if err != nil {
 			log.Printf("emails config: %v", err)
 			emailsFail++

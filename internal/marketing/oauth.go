@@ -2,6 +2,8 @@ package marketing
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -88,6 +90,12 @@ func RunGoogleOAuth() {
 		log.Fatalf("no se pudo escuchar en %s: %v\nAñade esta URI exacta en el cliente OAuth (Authorized redirect URIs):\n  %s", listenHost, err, redirect)
 	}
 
+	stateBytes := make([]byte, 16)
+	if _, err := rand.Read(stateBytes); err != nil {
+		log.Fatalf("generar state: %v", err)
+	}
+	stateToken := hex.EncodeToString(stateBytes)
+
 	codeCh := make(chan string, 1)
 	errCh := make(chan error, 1)
 	mux := http.NewServeMux()
@@ -99,6 +107,11 @@ func RunGoogleOAuth() {
 			}
 			_, _ = w.Write([]byte("Error OAuth: " + msg + "\nPuedes cerrar esta ventana."))
 			errCh <- fmt.Errorf("%s", msg)
+			return
+		}
+		if r.URL.Query().Get("state") != stateToken {
+			http.Error(w, "state inválido (CSRF)", http.StatusBadRequest)
+			errCh <- fmt.Errorf("state OAuth inválido o ausente (posible CSRF)")
 			return
 		}
 		code := r.URL.Query().Get("code")
@@ -126,6 +139,7 @@ func RunGoogleOAuth() {
 		"scope":         {scopes},
 		"access_type":   {"offline"},
 		"prompt":        {"consent"},
+		"state":         {stateToken},
 	}.Encode()
 
 	fmt.Println("=== OAuth Google: Ads + Business Profile ===")

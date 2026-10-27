@@ -83,6 +83,11 @@ type Config struct {
 	EmailsWPUser        string
 	EmailsWPAppPassword string
 	EmailsFormMap       string // 1:Cobertura:Residencial;2:Internet Residencial:Residencial
+
+	// WP Mail SMTP Pro (EMAILS_PROVIDER=wpmailsmtp)
+	EmailsSubjectMap string // Tipo:TipoCliente:regex;... (vacío = mapeo por defecto)
+	EmailsSource     string // filtro por columna Source del Email Log (ej. "Contact Form 7")
+	EmailsLogTZ      string // zona horaria de date_sent en la tabla del log (WP Mail SMTP guarda en UTC)
 }
 
 func LoadConfig() (*Config, error) {
@@ -149,6 +154,9 @@ func LoadConfig() (*Config, error) {
 		EmailsWPUser:        strings.TrimSpace(os.Getenv("EMAILS_WP_USER")),
 		EmailsWPAppPassword: strings.TrimSpace(os.Getenv("EMAILS_WP_APP_PASSWORD")),
 		EmailsFormMap:       strings.TrimSpace(os.Getenv("EMAILS_FORM_MAP")),
+		EmailsSubjectMap:    strings.TrimSpace(os.Getenv("EMAILS_SUBJECT_MAP")),
+		EmailsSource:        envOr("EMAILS_SOURCE", "Contact Form 7"),
+		EmailsLogTZ:         envOr("EMAILS_LOG_TZ", "UTC"),
 	}
 
 	if cfg.Workers < 1 {
@@ -236,11 +244,15 @@ func (c *Config) GMBEnabled() bool {
 }
 
 func (c *Config) EmailsEnabled() bool {
-	if c.EmailsProvider != "gravityforms" {
+	creds := c.EmailsWPBaseURL != "" && c.EmailsWPUser != "" && c.EmailsWPAppPassword != ""
+	switch c.EmailsProvider {
+	case "gravityforms":
+		return creds && c.EmailsFormMap != ""
+	case "wpmailsmtp":
+		return creds
+	default:
 		return false
 	}
-	return c.EmailsWPBaseURL != "" && c.EmailsWPUser != "" &&
-		c.EmailsWPAppPassword != "" && c.EmailsFormMap != ""
 }
 
 func (c *Config) MarketingEnabled() bool {

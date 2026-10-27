@@ -256,13 +256,27 @@ con los location IDs que imprime el probe.
 D3) EMAILS (plugin WordPress)
 --------------------------------------------------------------------------------
 
-Tabla emails_metricas lista para el cron. El fetch real está implementado
-para Gravity Forms (REST API v2).
+Tabla emails_metricas lista para el cron. Proveedores implementados:
+  - wpmailsmtp   → Email Log de WP Mail SMTP Pro (el que usa osnetpr.com)
+  - gravityforms → Gravity Forms REST API v2
 
-Si el plugin de tu jefe NO es Gravity Forms, deja EMAILS_PROVIDER vacío
-(el cron omite emails) y pásame el nombre del plugin.
+WP Mail SMTP Pro (EMAILS_PROVIDER=wpmailsmtp):
+  1. WP Mail SMTP → Settings → Email Log: "Enable Log" en ON
+  2. Subir wordpress/mu-plugins/osnet-email-log-api.php a
+     wp-content/mu-plugins/ (crear la carpeta si no existe)
+  3. WP Admin → Usuarios → Perfil → Application Passwords → crear una
+     (el usuario debe ser Administrador: capacidad manage_options)
+  4. .env:
+       EMAILS_PROVIDER=wpmailsmtp
+       EMAILS_WP_BASE_URL=https://osnetpr.com
+       EMAILS_WP_USER=<usuario>
+       EMAILS_WP_APP_PASSWORD=<application password>
+       # EMAILS_SOURCE=Contact Form 7   (default: solo formularios CF7)
+       # EMAILS_SUBJECT_MAP=Tipo:TipoCliente:regex;...  (ver .env.example)
+  5. go run . -probe-emails  (lista asuntos, su clasificación y el recuento)
+  Nota: solo hay datos desde que se activó el Email Log.
 
-Para Gravity Forms:
+Gravity Forms:
   1. WP Admin → Users → Profile → Application Passwords
   2. Forms → Settings → REST API → Enable
   3. EMAILS_PROVIDER=gravityforms

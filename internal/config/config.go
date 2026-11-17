@@ -5,8 +5,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-
-	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -91,7 +89,9 @@ type Config struct {
 }
 
 func LoadConfig() (*Config, error) {
-	_ = godotenv.Load()
+	if err := LoadEnv(); err != nil {
+		return nil, err
+	}
 
 	cfg := &Config{
 		UbersmithBaseURL:     envOr("UBERSMITH_BASE_URL", "https://billing.osnetpr.com/api/2.0/"),
@@ -165,6 +165,9 @@ func LoadConfig() (*Config, error) {
 	if cfg.MarketingMonthsLookback < 1 {
 		cfg.MarketingMonthsLookback = 1
 	}
+	if (cfg.MySQLHost == "localhost" || cfg.MySQLHost == "127.0.0.1") && runningInDocker() {
+		cfg.MySQLHost = "host.docker.internal"
+	}
 
 	var missing []string
 	if cfg.UbersmithUser == "" {
@@ -186,7 +189,7 @@ func LoadConfig() (*Config, error) {
 		missing = append(missing, "MYSQL_DATABASE")
 	}
 	if len(missing) > 0 {
-		return nil, fmt.Errorf("faltan variables en .env: %s", strings.Join(missing, ", "))
+		return nil, fmt.Errorf("faltan variables de entorno: %s", strings.Join(missing, ", "))
 	}
 
 	return cfg, nil
@@ -283,4 +286,9 @@ func envInt(key string, fallback int) int {
 func envBool(key string) bool {
 	v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
 	return v == "1" || v == "true" || v == "yes" || v == "on"
+}
+
+func runningInDocker() bool {
+	_, err := os.Stat("/.dockerenv")
+	return err == nil
 }

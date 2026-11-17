@@ -74,6 +74,10 @@ func main() {
 		return
 	}
 
+	if !*once && !*backfill {
+		startHealthServer(cfg.Port)
+	}
+
 	if *backfill || cfg.Backfill {
 		log.Println("Ejecutando backfill mensual...")
 		if err := tickets.EjecutarBackfill(cfg, ubersmith, analizador, db); err != nil {
@@ -82,18 +86,17 @@ func main() {
 		if err := marketing.EjecutarBackfill(cfg, db); err != nil {
 			log.Fatalf("backfill marketing: %v", err)
 		}
-		return
-	}
-
-	if *once || cfg.RunOnStart {
+		if *backfill {
+			return
+		}
+		log.Println("Backfill inicial completado; pasando al scheduler semanal...")
+	} else if *once || cfg.RunOnStart {
 		log.Println("Ejecutando flujo ahora...")
 		run()
 		if *once {
 			return
 		}
 	}
-
-	startHealthServer(cfg.Port)
 
 	loc, err := time.LoadLocation(cfg.CronTZ)
 	if err != nil {
@@ -114,7 +117,7 @@ func main() {
 	if cfg.MarketingEnabled() {
 		log.Println("Marketing (redes/ads/gmb/emails): habilitado en el mismo cron semanal")
 	} else {
-		log.Println("Marketing (redes/ads/gmb/emails): deshabilitado hasta completar variables en .env")
+		log.Println("Marketing (redes/ads/gmb/emails): deshabilitado hasta completar variables (Infisical o .env)")
 	}
 
 	select {}

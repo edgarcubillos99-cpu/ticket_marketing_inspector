@@ -73,7 +73,8 @@ func sincronizarMarketingRango(cfg *config.Config, store *store.Store, desde, ha
 			if err != nil {
 				log.Printf("meta ads: %v", err)
 				adsFail++
-			} else {
+			}
+			if len(rows) > 0 {
 				ok, fail := guardarAds(store, rows)
 				adsOK += ok
 				adsFail += fail
@@ -88,7 +89,8 @@ func sincronizarMarketingRango(cfg *config.Config, store *store.Store, desde, ha
 			if err != nil {
 				log.Printf("linkedin organico: %v", err)
 				socialFail++
-			} else {
+			}
+			if len(rows) > 0 {
 				ok, fail := guardarSocial(store, rows)
 				socialOK += ok
 				socialFail += fail
@@ -99,7 +101,8 @@ func sincronizarMarketingRango(cfg *config.Config, store *store.Store, desde, ha
 			if err != nil {
 				log.Printf("linkedin ads: %v", err)
 				adsFail++
-			} else {
+			}
+			if len(rows) > 0 {
 				ok, fail := guardarAds(store, rows)
 				adsOK += ok
 				adsFail += fail
@@ -113,7 +116,8 @@ func sincronizarMarketingRango(cfg *config.Config, store *store.Store, desde, ha
 		if err != nil {
 			log.Printf("google ads: %v", err)
 			adsFail++
-		} else {
+		}
+		if len(rows) > 0 {
 			ok, fail := guardarAds(store, rows)
 			adsOK += ok
 			adsFail += fail
@@ -127,7 +131,8 @@ func sincronizarMarketingRango(cfg *config.Config, store *store.Store, desde, ha
 		if err != nil {
 			log.Printf("mybusiness: %v", err)
 			gmbFail++
-		} else {
+		}
+		if len(rows) > 0 {
 			ok, fail := guardarGMB(store, rows)
 			gmbOK += ok
 			gmbFail += fail
@@ -144,7 +149,8 @@ func sincronizarMarketingRango(cfg *config.Config, store *store.Store, desde, ha
 			if err != nil {
 				log.Printf("emails: %v", err)
 				emailsFail++
-			} else {
+			}
+			if len(rows) > 0 {
 				ok, fail := guardarEmails(store, rows)
 				emailsOK += ok
 				emailsFail += fail

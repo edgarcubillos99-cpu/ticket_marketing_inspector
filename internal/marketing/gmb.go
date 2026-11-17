@@ -276,14 +276,19 @@ func (c *GMBClient) Fetch(desde, hasta time.Time, loc *time.Location) ([]domain.
 
 	meses := domain.MesesEnRango(desde, hasta, loc)
 	var out []domain.MetricaMyBusiness
+	var errs []string
 	for _, sede := range sedes {
 		for _, mes := range meses {
 			m, err := c.fetchMes(sede, mes, loc)
 			if err != nil {
-				return nil, fmt.Errorf("%s %s: %w", sede.Sede, mes.Format("2006-01"), err)
+				errs = append(errs, fmt.Sprintf("%s %s: %v", sede.Sede, mes.Format("2006-01"), err))
+				continue
 			}
 			out = append(out, m)
 		}
+	}
+	if len(errs) > 0 {
+		return out, fmt.Errorf("%s", strings.Join(errs, "; "))
 	}
 	return out, nil
 }

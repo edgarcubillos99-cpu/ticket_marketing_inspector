@@ -24,12 +24,12 @@ type Store struct {
 }
 
 func NewStore(cfg *config.Config) (*Store, error) {
+	dbName := sanitizeTableName(cfg.MySQLDatabase)
 	mc := mysql.NewConfig()
 	mc.User = cfg.MySQLUser
 	mc.Passwd = cfg.MySQLPassword
 	mc.Net = "tcp"
 	mc.Addr = net.JoinHostPort(cfg.MySQLHost, cfg.MySQLPort)
-	mc.DBName = cfg.MySQLDatabase
 	mc.ParseTime = true
 	mc.Params = map[string]string{
 		"charset": "utf8mb4",
@@ -39,6 +39,11 @@ func NewStore(cfg *config.Config) (*Store, error) {
 		mc.TLSConfig = cfg.MySQLTLS
 	}
 
+	if err := ensureDatabase(mc, dbName); err != nil {
+		log.Printf("MySQL: aviso al verificar/crear base de datos %s: %v", dbName, err)
+	}
+
+	mc.DBName = dbName
 	db, err := sql.Open("mysql", mc.FormatDSN())
 	if err != nil {
 		return nil, fmt.Errorf("abrir MySQL: %w", err)
@@ -95,6 +100,23 @@ func NewStore(cfg *config.Config) (*Store, error) {
 	return store, nil
 }
 
+func ensureDatabase(baseCfg *mysql.Config, dbName string) error {
+	initCfg := *baseCfg
+	initCfg.DBName = ""
+	tmpDB, err := sql.Open("mysql", initCfg.FormatDSN())
+	if err != nil {
+		return err
+	}
+	defer tmpDB.Close()
+
+	q := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci", dbName)
+	if _, err := tmpDB.Exec(q); err != nil {
+		return err
+	}
+	log.Printf("MySQL: base de datos %s lista", dbName)
+	return nil
+}
+
 func (s *Store) ensureTable() error {
 	exists, err := s.tableExists(s.table)
 	if err != nil {
@@ -102,7 +124,7 @@ func (s *Store) ensureTable() error {
 	}
 	if exists {
 		log.Printf("MySQL: tabla %s encontrada", s.table)
-		return nil
+		return s.ensureTableIndexes()
 	}
 
 	log.Printf("MySQL: tabla %s no existe, creándola...", s.table)
@@ -118,7 +140,16 @@ CREATE TABLE %s (
   motivo VARCHAR(255) DEFAULT NULL,
   plan_instalado VARCHAR(100) DEFAULT NULL,
   agente VARCHAR(100) DEFAULT NULL,
-  PRIMARY KEY (ticket_id)
+  PRIMARY KEY (ticket_id),
+  KEY idx_tickets_fecha_hora (fecha_hora),
+  KEY idx_tickets_fecha_estatus (fecha_hora, estatus),
+  KEY idx_tickets_estatus_pueblo (estatus, pueblo),
+  KEY idx_tickets_pueblo (pueblo),
+  KEY idx_tickets_tipo_cliente (tipo_cliente),
+  KEY idx_tickets_referred_by (referred_by),
+  KEY idx_tickets_plan_instalado (plan_instalado),
+  KEY idx_tickets_motivo (motivo),
+  KEY idx_tickets_agente (agente)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, s.table)
 
 	if _, err := s.db.Exec(q); err != nil {
@@ -135,7 +166,7 @@ func (s *Store) ensureSocialTable() error {
 	}
 	if exists {
 		log.Printf("MySQL: tabla %s encontrada", s.socialTable)
-		return nil
+		return s.ensureIndex(s.socialTable, "idx_social_mes", "(mes)")
 	}
 
 	log.Printf("MySQL: tabla %s no existe, creándola...", s.socialTable)
@@ -153,7 +184,8 @@ CREATE TABLE %s (
   total_seguidores BIGINT NOT NULL DEFAULT 0,
   actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_plataforma_mes (plataforma, mes)
+  UNIQUE KEY uk_plataforma_mes (plataforma, mes),
+  KEY idx_social_mes (mes)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, s.socialTable)
 
 	if _, err := s.db.Exec(q); err != nil {
@@ -170,6 +202,16 @@ func (s *Store) ensureAdsTable() error {
 	}
 	if exists {
 		log.Printf("MySQL: tabla %s encontrada", s.adsTable)
+		for _, idx := range [][2]string{
+			{"idx_ads_mes", "(mes)"},
+			{"idx_ads_plataforma_mes", "(plataforma, mes)"},
+			{"idx_ads_cliente_mes", "(tipo_cliente, mes)"},
+			{"idx_ads_tipo_resultado", "(tipo_resultado)"},
+		} {
+			if err := s.ensureIndex(s.adsTable, idx[0], idx[1]); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
@@ -185,7 +227,11 @@ CREATE TABLE %s (
   inversion DECIMAL(14,2) NOT NULL DEFAULT 0.00,
   actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_ads_plataforma_cliente_mes_resultado (plataforma, tipo_cliente, mes, tipo_resultado)
+  UNIQUE KEY uk_ads_plataforma_cliente_mes_resultado (plataforma, tipo_cliente, mes, tipo_resultado),
+  KEY idx_ads_mes (mes),
+  KEY idx_ads_plataforma_mes (plataforma, mes),
+  KEY idx_ads_cliente_mes (tipo_cliente, mes),
+  KEY idx_ads_tipo_resultado (tipo_resultado)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, s.adsTable)
 
 	if _, err := s.db.Exec(q); err != nil {
@@ -202,7 +248,7 @@ func (s *Store) ensureGMBTable() error {
 	}
 	if exists {
 		log.Printf("MySQL: tabla %s encontrada", s.gmbTable)
-		return nil
+		return s.ensureIndex(s.gmbTable, "idx_gmb_mes", "(mes)")
 	}
 
 	log.Printf("MySQL: tabla %s no existe, creándola...", s.gmbTable)
@@ -219,7 +265,8 @@ CREATE TABLE %s (
   interacciones_totales BIGINT NOT NULL DEFAULT 0,
   actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_gmb_sede_mes (sede, mes)
+  UNIQUE KEY uk_gmb_sede_mes (sede, mes),
+  KEY idx_gmb_mes (mes)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, s.gmbTable)
 
 	if _, err := s.db.Exec(q); err != nil {
@@ -236,6 +283,14 @@ func (s *Store) ensureEmailsTable() error {
 	}
 	if exists {
 		log.Printf("MySQL: tabla %s encontrada", s.emailsTable)
+		for _, idx := range [][2]string{
+			{"idx_emails_mes", "(mes)"},
+			{"idx_emails_cliente_mes", "(tipo_cliente, mes)"},
+		} {
+			if err := s.ensureIndex(s.emailsTable, idx[0], idx[1]); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
@@ -249,13 +304,56 @@ CREATE TABLE %s (
   cantidad BIGINT NOT NULL DEFAULT 0,
   actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_emails_tipo_cliente_mes (tipo, tipo_cliente, mes)
+  UNIQUE KEY uk_emails_tipo_cliente_mes (tipo, tipo_cliente, mes),
+  KEY idx_emails_mes (mes),
+  KEY idx_emails_cliente_mes (tipo_cliente, mes)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, s.emailsTable)
 
 	if _, err := s.db.Exec(q); err != nil {
 		return fmt.Errorf("crear tabla %s: %w", s.emailsTable, err)
 	}
 	log.Printf("MySQL: tabla %s creada", s.emailsTable)
+	return nil
+}
+
+func (s *Store) ensureTableIndexes() error {
+	indexes := [][2]string{
+		{"idx_tickets_fecha_hora", "(fecha_hora)"},
+		{"idx_tickets_fecha_estatus", "(fecha_hora, estatus)"},
+		{"idx_tickets_estatus_pueblo", "(estatus, pueblo)"},
+		{"idx_tickets_pueblo", "(pueblo)"},
+		{"idx_tickets_tipo_cliente", "(tipo_cliente)"},
+		{"idx_tickets_referred_by", "(referred_by)"},
+		{"idx_tickets_plan_instalado", "(plan_instalado)"},
+		{"idx_tickets_motivo", "(motivo)"},
+		{"idx_tickets_agente", "(agente)"},
+	}
+	for _, idx := range indexes {
+		if err := s.ensureIndex(s.table, idx[0], idx[1]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) ensureIndex(table, indexName, colsDDL string) error {
+	var name string
+	err := s.db.QueryRow(`
+SELECT INDEX_NAME
+FROM information_schema.STATISTICS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?
+LIMIT 1`, table, indexName).Scan(&name)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return fmt.Errorf("verificar índice %s.%s: %w", table, indexName, err)
+	}
+	q := fmt.Sprintf("CREATE INDEX %s ON %s %s", indexName, table, colsDDL)
+	if _, err := s.db.Exec(q); err != nil {
+		return fmt.Errorf("crear índice %s en %s: %w", indexName, table, err)
+	}
+	log.Printf("MySQL: índice %s creado en %s", indexName, table)
 	return nil
 }
 

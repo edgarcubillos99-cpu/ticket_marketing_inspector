@@ -16,9 +16,9 @@ import (
 // Mapeo por defecto asunto → Tipo/TipoCliente (se evalúa en orden, gana el primero que haga match).
 // Comercial va antes que Residencial porque sus marcadores son más específicos.
 const defaultWPMailSMTPSubjectMap = `Cobertura:Residencial:(?i)cobertura;` +
-	`Internet Comercial:Comercial:(?i)internet.*comercial;` +
 	`Telefonía Comercial:Comercial:(?i)tel[eé]f.*comercial;` +
-	`Internet Residencial:Residencial:(?i)internet;` +
+	`Internet Comercial:Comercial:(?i)comercial;` +
+	`Internet Residencial:Residencial:(?i)internet|back\s*to\s*school;` +
 	`Telefonía Residencial:Residencial:(?i)tel[eé]f;` +
 	`Otros:Residencial:.*`
 
@@ -185,6 +185,27 @@ func (c *WPMailSMTPClient) Fetch(desde, hasta time.Time, loc *time.Location) ([]
 	resp, err := c.fetchRaw(inicio.AddDate(0, 0, -1), fin.AddDate(0, 0, 1))
 	if err != nil {
 		return nil, err
+	}
+
+	// Si el Email Log tiene fecha de inicio posterior a `desde`, no emitir ceros
+	// para meses donde el log aún no existía.
+	if resp.OldestDateSent != nil && strings.TrimSpace(*resp.OldestDateSent) != "" {
+		if oldest, err := time.ParseInLocation("2006-01-02 15:04:05", strings.TrimSpace(*resp.OldestDateSent), c.logLoc); err == nil {
+			primerMesLog := domain.PrimerDiaMes(oldest.In(loc), loc)
+			if inicio.Before(primerMesLog) {
+				var filtrados []time.Time
+				for _, m := range meses {
+					if !m.Before(primerMesLog) {
+						filtrados = append(filtrados, m)
+					}
+				}
+				meses = filtrados
+				if len(meses) == 0 {
+					return nil, nil
+				}
+				inicio = meses[0]
+			}
+		}
 	}
 
 	type key struct {

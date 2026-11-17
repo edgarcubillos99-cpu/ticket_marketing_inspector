@@ -17,12 +17,14 @@ func TestWPMailSMTPClasificar(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string]string{
-		"Solicitud de Internet Residencial": "Internet Residencial/Residencial",
-		"Solicitud de Internet Comercial":   "Internet Comercial/Comercial",
-		"Solicitud de Teléfono Comercial":   "Telefonía Comercial/Comercial",
-		"Solicitud de Telefonía":            "Telefonía Residencial/Residencial",
-		"Verificar Cobertura":               "Cobertura/Residencial",
-		"Contacto desde el Website":         "Otros/Residencial",
+		"Solicitud de Internet Residencial":      "Internet Residencial/Residencial",
+		"Solicitud de Oferta de Back to School":  "Internet Residencial/Residencial",
+		"Solicitud de Internet Comercial":        "Internet Comercial/Comercial",
+		"Solicitud Comercial":                    "Internet Comercial/Comercial",
+		"Solicitud de Teléfono Comercial":        "Telefonía Comercial/Comercial",
+		"Solicitud de Telefonía":                 "Telefonía Residencial/Residencial",
+		"Verificar Cobertura":                    "Cobertura/Residencial",
+		"Contacto desde el Website":              "Otros/Residencial",
 	}
 	for subj, want := range cases {
 		tipo, cli, ok := c.Clasificar(subj)

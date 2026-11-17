@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"agente_marketing/internal/config"
 	"agente_marketing/internal/domain"
-	"github.com/joho/godotenv"
 )
 
 const (
@@ -68,7 +68,9 @@ func googleRefreshAccessToken(httpClient *http.Client, clientID, clientSecret, r
 }
 
 func RunGoogleOAuth() {
-	_ = godotenv.Load()
+	if err := config.LoadEnv(); err != nil {
+		log.Fatalf("config: %v", err)
+	}
 	clientID := strings.TrimSpace(firstNonEmpty(os.Getenv("GMB_CLIENT_ID"), os.Getenv("GOOGLE_ADS_CLIENT_ID")))
 	clientSecret := strings.TrimSpace(firstNonEmpty(os.Getenv("GMB_CLIENT_SECRET"), os.Getenv("GOOGLE_ADS_CLIENT_SECRET")))
 	if clientID == "" || clientSecret == "" {
